@@ -376,11 +376,20 @@ async function startSwarm(nextTopic) {
 	state.revision = 0
 	state.topic = nextTopic || randomBuffer(32)
 	state.swarm = new Hyperswarm()
-	state.swarm.on('connection', setupConnection)
+	state.swarm.on('connection', (conn, info) => {
+		console.error('[worker] peer connected, relayed:', info.relayed, 'topic:', topicHex().slice(0, 8))
+		setupConnection(conn)
+	})
 	state.swarm.on('error', (error) => {
+		console.error('[worker] swarm error:', error.message)
 		send({ type: 'error', code: 'SWARM_ERROR', message: error.message })
 	})
 	state.discovery = state.swarm.join(state.topic, { client: true, server: true })
+	state.discovery.flushed().then(() => {
+		console.error('[worker] DHT lookup flushed, peers found:', state.swarm.connections.size)
+	}).catch((e) => {
+		console.error('[worker] DHT flush error:', e.message)
+	})
 	state.ready = true
 	send({ type: 'READY', topic: topicHex(), peerId: state.localPeerId })
 	publishState()
