@@ -15,6 +15,7 @@ const state = {
 	discovery: null,
 	connections: new Map(),
 	currentPoll: null,
+	revision: 0,
 	ready: false,
 	ipcBuffer: '',
 	queue: Promise.resolve()
@@ -59,12 +60,35 @@ function computeCounts(votes, optionsLength) {
 }
 
 function publishState() {
+	const pollClone = clonePoll(state.currentPoll)
 	send({
 		type: 'STATE',
 		topic: topicHex(),
-		poll: clonePoll(state.currentPoll),
+		poll: pollClone,
+		revision: state.revision,
 		peers: state.connections.size
 	})
+}
+
+function voteCount(poll) {
+	if (!poll || !poll.votes) return 0
+	return Object.keys(poll.votes).length
+}
+
+function shouldReplacePoll(currentPoll, incomingPoll) {
+	if (!incomingPoll) return false
+	if (!currentPoll) return true
+	if (currentPoll.id !== incomingPoll.id) return false
+
+	const currentVotes = voteCount(currentPoll)
+	const incomingVotes = voteCount(incomingPoll)
+	if (incomingVotes > currentVotes) return true
+	if (incomingVotes < currentVotes) return false
+
+	if (currentPoll.status === 'closed' && incomingPoll.status !== 'closed') return false
+	if (incomingPoll.status === 'closed' && currentPoll.status !== 'closed') return true
+
+	return (incomingPoll.closedAt || 0) >= (currentPoll.closedAt || 0)
 }
 
 function sendToConnection(connection, message) {
@@ -128,6 +152,7 @@ function setCurrentPoll(poll) {
 		clearTimeout(state.currentPoll.timer)
 	}
 	state.currentPoll = poll
+	state.revision += 1
 	if (state.currentPoll && state.currentPoll.status === 'open') {
 		schedulePollClose()
 	}
@@ -206,6 +231,7 @@ async function castVote(data, voterId, broadcastChange) {
 	const previous = state.currentPoll.votes[voterId]
 	state.currentPoll.votes[voterId] = optionIndex
 	state.currentPoll.counts = computeCounts(state.currentPoll.votes, state.currentPoll.options.length)
+	state.revision += 1
 
 	if (broadcastChange) {
 		broadcast({
@@ -229,6 +255,7 @@ async function closePoll(reason, broadcastChange = true) {
 
 	state.currentPoll.status = 'closed'
 	state.currentPoll.closedAt = Date.now()
+	state.revision += 1
 	if (broadcastChange) {
 		broadcast({
 			type: 'POLL_CLOSED',
@@ -255,7 +282,7 @@ async function handlePeerMessage(message, senderId) {
 
 	if (message.type === 'STATE_SYNC') {
 		if (!message.poll) return
-		if (!state.currentPoll || state.currentPoll.id === message.poll.id) {
+		if (shouldReplacePoll(state.currentPoll, message.poll)) {
 			const poll = { ...message.poll, timer: null }
 			setCurrentPoll(poll)
 			publishState()
@@ -266,8 +293,10 @@ async function handlePeerMessage(message, senderId) {
 	if (message.type === 'CREATE_POLL') {
 		if (isCurrentPollOpen()) {
 			if (state.currentPoll && message.poll && state.currentPoll.id === message.poll.id) {
-				setCurrentPoll({ ...message.poll, timer: null })
-				publishState()
+				if (shouldReplacePoll(state.currentPoll, message.poll)) {
+					setCurrentPoll({ ...message.poll, timer: null })
+					publishState()
+				}
 			}
 			return
 		}
@@ -283,14 +312,14 @@ async function handlePeerMessage(message, senderId) {
 		return
 	}
 
-	if (message.type === 'CAST_VOTE') {
+	if (message.type === 'VOTE_CAST') {
 		if (!isCurrentPollOpen()) return
 		if (message.pollId !== state.currentPoll.id) return
 		await castVote(message, message.voterId || senderId, false)
 		return
 	}
 
-	if (message.type === 'CLOSE_POLL') {
+	if (message.type === 'POLL_CLOSED') {
 		if (!state.currentPoll || message.pollId !== state.currentPoll.id) return
 		await closePoll(message.reason || 'closed', false)
 		return
@@ -298,8 +327,8 @@ async function handlePeerMessage(message, senderId) {
 }
 
 function setupConnection(connection) {
-	const remoteId = connection.remotePublicKey ? connection.remotePublicKey.toString('hex') : randomBytes(16).toString('hex')
-	state.connections.set(remoteId, connection)
+	const connectionId = randomBuffer(16).toString('hex')
+	state.connections.set(connectionId, connection)
 	send({ type: 'PEERS', count: state.connections.size, topic: topicHex() })
 	sendToConnection(connection, { type: 'HELLO', topic: topicHex(), peerId: state.localPeerId })
 	if (state.currentPoll) {
@@ -321,7 +350,7 @@ function setupConnection(connection) {
 				continue
 			}
 			state.queue = state.queue
-				.then(() => handlePeerMessage(message, remoteId))
+				.then(() => handlePeerMessage(message, connectionId))
 				.catch((error) => {
 					send({ type: 'error', code: 'PEER_MESSAGE_FAILED', message: error.message })
 				})
@@ -329,7 +358,7 @@ function setupConnection(connection) {
 	})
 
 	connection.on('close', () => {
-		state.connections.delete(remoteId)
+		state.connections.delete(connectionId)
 		send({ type: 'PEERS', count: state.connections.size, topic: topicHex() })
 	})
 
@@ -344,7 +373,8 @@ async function startSwarm(nextTopic) {
 		clearTimeout(state.currentPoll.timer)
 	}
 	state.currentPoll = null
-	state.topic = nextTopic || randomBytes(32)
+	state.revision = 0
+	state.topic = nextTopic || randomBuffer(32)
 	state.swarm = new Hyperswarm()
 	state.swarm.on('connection', setupConnection)
 	state.swarm.on('error', (error) => {
@@ -390,7 +420,13 @@ async function handleLocalMessage(message) {
 	}
 
 	if (message.type === 'PING') {
-		send({ type: 'PONG', topic: topicHex(), peerId: state.localPeerId })
+		send({
+			type: 'PONG',
+			topic: topicHex(),
+			peerId: state.localPeerId,
+			revision: state.revision,
+			poll: clonePoll(state.currentPoll)
+		})
 		return
 	}
 
