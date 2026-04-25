@@ -2,17 +2,14 @@ const Hyperswarm = require('hyperswarm')
 
 function randomBuffer(size) {
 	const buf = Buffer.alloc(size)
-	for (let i = 0; i < size; i++) {
-		buf[i] = Math.floor(Math.random() * 256)
-	}
+	for (let i = 0; i < size; i++) buf[i] = Math.floor(Math.random() * 256)
 	return buf
 }
 
 let bootConfig = { role: 'voter', pollConfig: null }
 try {
 	if (Bare.argv[3]) bootConfig = JSON.parse(Bare.argv[3])
-} catch {
-}
+} catch {}
 
 function isHexTopic(value) {
 	return typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value)
@@ -41,18 +38,41 @@ function topicHex() {
 	return state.topic ? state.topic.toString('hex') : ''
 }
 
-function clonePoll(poll) {
+// Full clone for P2P sync — includes votes map so peers can merge state
+function clonePollFull(poll) {
 	if (!poll) return null
 	return {
 		id: poll.id,
 		question: poll.question,
-		options: poll.options.map((option) => ({ ...option })),
+		options: poll.options.map((o) => ({ ...o })),
 		createdBy: poll.createdBy,
 		createdAt: poll.createdAt,
 		endsAt: poll.endsAt,
 		status: poll.status,
 		votes: { ...poll.votes },
 		counts: [...poll.counts],
+		verifiedVoters: { ...(poll.verifiedVoters || {}) },
+		closedAt: poll.closedAt || null
+	}
+}
+
+// Public clone for the renderer — no voter→choice mapping (anonymous voting)
+function clonePollPublic(poll) {
+	if (!poll) return null
+	const myVote = poll.votes ? (poll.votes[state.localPeerId] ?? null) : null
+	return {
+		id: poll.id,
+		question: poll.question,
+		options: poll.options.map((o) => ({ ...o })),
+		createdBy: poll.createdBy,
+		createdAt: poll.createdAt,
+		endsAt: poll.endsAt,
+		status: poll.status,
+		counts: [...poll.counts],
+		totalVotes: Object.keys(poll.votes || {}).length,
+		myVote,
+		hasVoted: myVote !== null,
+		verifiedVoters: Object.values(poll.verifiedVoters || {}),
 		closedAt: poll.closedAt || null
 	}
 }
@@ -60,20 +80,17 @@ function clonePoll(poll) {
 function computeCounts(votes, optionsLength) {
 	const counts = Array.from({ length: optionsLength }, () => 0)
 	for (const choice of Object.values(votes)) {
-		if (Number.isInteger(choice) && choice >= 0 && choice < optionsLength) {
-			counts[choice] += 1
-		}
+		if (Number.isInteger(choice) && choice >= 0 && choice < optionsLength) counts[choice] += 1
 	}
 	return counts
 }
 
 function publishState() {
-	const pollClone = clonePoll(state.currentPoll)
 	send({
 		type: 'STATE',
 		role: state.role,
 		topic: topicHex(),
-		poll: pollClone,
+		poll: clonePollPublic(state.currentPoll),
 		revision: state.revision,
 		peers: state.connections.size
 	})
@@ -84,7 +101,6 @@ function mergePolls(local, remote) {
 	if (!remote) return local
 	if (!local) return { ...remote, timer: null }
 	if (local.id !== remote.id) {
-		// Different polls. Prefer the open one; otherwise the older.
 		if (local.status === 'open' && remote.status !== 'open') return local
 		if (remote.status === 'open' && local.status !== 'open') return { ...remote, timer: null }
 		return local.createdAt <= remote.createdAt ? local : { ...remote, timer: null }
@@ -93,6 +109,11 @@ function mergePolls(local, remote) {
 	const mergedVotes = { ...local.votes }
 	for (const [voterId, choice] of Object.entries(remote.votes || {})) {
 		if (!(voterId in mergedVotes)) mergedVotes[voterId] = choice
+	}
+
+	const mergedVerifiedVoters = { ...(local.verifiedVoters || {}) }
+	for (const [pid, nif] of Object.entries(remote.verifiedVoters || {})) {
+		if (!(pid in mergedVerifiedVoters)) mergedVerifiedVoters[pid] = nif
 	}
 
 	const closed = local.status === 'closed' || remote.status === 'closed'
@@ -106,6 +127,7 @@ function mergePolls(local, remote) {
 		...local,
 		votes: mergedVotes,
 		counts: computeCounts(mergedVotes, local.options.length),
+		verifiedVoters: mergedVerifiedVoters,
 		status: closed ? 'closed' : 'open',
 		closedAt,
 		timer: local.timer || null
@@ -115,8 +137,7 @@ function mergePolls(local, remote) {
 function pollsEqual(a, b) {
 	if (a === b) return true
 	if (!a || !b) return false
-	if (a.id !== b.id) return false
-	if (a.status !== b.status) return false
+	if (a.id !== b.id || a.status !== b.status) return false
 	if ((a.closedAt || null) !== (b.closedAt || null)) return false
 	const aKeys = Object.keys(a.votes || {})
 	const bKeys = Object.keys(b.votes || {})
@@ -143,36 +164,25 @@ function broadcast(message) {
 
 function clearDiscovery() {
 	if (!state.discovery) return
-	try {
-		state.discovery.destroy()
-	} catch {
-	}
+	try { state.discovery.destroy() } catch {}
 	state.discovery = null
 }
 
 async function closeSwarm() {
 	clearDiscovery()
 	for (const connection of state.connections.values()) {
-		try {
-			connection.destroy()
-		} catch {
-		}
+		try { connection.destroy() } catch {}
 	}
 	state.connections.clear()
 	if (state.swarm) {
-		try {
-			await state.swarm.destroy()
-		} catch {
-		}
+		try { await state.swarm.destroy() } catch {}
 		state.swarm = null
 	}
 }
 
 function schedulePollClose() {
 	if (!state.currentPoll || state.currentPoll.status !== 'open') return
-	if (state.currentPoll.timer) {
-		clearTimeout(state.currentPoll.timer)
-	}
+	if (state.currentPoll.timer) clearTimeout(state.currentPoll.timer)
 	const remaining = Math.max(0, state.currentPoll.endsAt - Date.now())
 	state.currentPoll.timer = setTimeout(() => {
 		state.queue = state.queue
@@ -184,27 +194,21 @@ function schedulePollClose() {
 }
 
 function setCurrentPoll(poll) {
-	if (state.currentPoll && state.currentPoll.timer) {
-		clearTimeout(state.currentPoll.timer)
-	}
+	if (state.currentPoll && state.currentPoll.timer) clearTimeout(state.currentPoll.timer)
 	state.currentPoll = poll
 	state.revision += 1
-	if (state.currentPoll && state.currentPoll.status === 'open') {
-		schedulePollClose()
-	}
+	if (state.currentPoll && state.currentPoll.status === 'open') schedulePollClose()
 }
 
 function createPollPayload(question, options, timeoutMs) {
 	const cleanQuestion = typeof question === 'string' ? question.trim() : ''
 	const cleanOptions = Array.isArray(options)
-		? options.map((option) => String(option).trim()).filter(Boolean)
+		? options.map((o) => String(o).trim()).filter(Boolean)
 		: []
 	const duration = Number(timeoutMs)
-
 	if (!cleanQuestion) throw new Error('question is required')
 	if (cleanOptions.length < 2) throw new Error('at least two options are required')
 	if (!Number.isFinite(duration) || duration < 5000) throw new Error('timeout must be at least 5000 ms')
-
 	return {
 		id: randomBuffer(16).toString('hex'),
 		question: cleanQuestion,
@@ -219,7 +223,6 @@ function isCurrentPollOpen() {
 
 async function createPoll(data, createdBy, broadcastChange) {
 	if (isCurrentPollOpen()) throw new Error('there is already an active poll')
-
 	const payload = createPollPayload(data.question, data.options, data.timeoutMs)
 	const now = Date.now()
 	const poll = {
@@ -232,53 +235,38 @@ async function createPoll(data, createdBy, broadcastChange) {
 		status: 'open',
 		votes: {},
 		counts: Array.from({ length: payload.options.length }, () => 0),
+		verifiedVoters: {},
 		closedAt: null
 	}
-
 	setCurrentPoll(poll)
 	if (broadcastChange) {
-		broadcast({
-			type: 'CREATE_POLL',
-			poll: clonePoll(state.currentPoll),
-			topic: topicHex()
-		})
+		broadcast({ type: 'CREATE_POLL', poll: clonePollFull(state.currentPoll), topic: topicHex() })
 	}
 	publishState()
 }
 
 async function castVote(data, voterId, broadcastChange) {
-	if (state.role === 'creator') throw new Error('creator node cannot vote')
 	if (!isCurrentPollOpen()) throw new Error('there is no active poll')
-
 	const optionIndex = Number(data.optionIndex)
-	if (
-		!Number.isInteger(optionIndex) ||
-		optionIndex < 0 ||
-		optionIndex >= state.currentPoll.options.length
-	) {
+	if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= state.currentPoll.options.length) {
 		throw new Error('invalid optionIndex')
 	}
-
-	// Vote-once semantics: keep first vote per voterId.
 	if (voterId in state.currentPoll.votes) {
-		// No change, but still publish (idempotent).
 		publishState()
 		return
 	}
-
 	state.currentPoll.votes[voterId] = optionIndex
-	state.currentPoll.counts = computeCounts(
-		state.currentPoll.votes,
-		state.currentPoll.options.length
-	)
+	state.currentPoll.counts = computeCounts(state.currentPoll.votes, state.currentPoll.options.length)
+	// Record cert identity separately — not linked to vote choice (anonymous voting)
+	if (data.certNIF) state.currentPoll.verifiedVoters[voterId] = data.certNIF
 	state.revision += 1
-
 	if (broadcastChange) {
 		broadcast({
 			type: 'VOTE_CAST',
 			pollId: state.currentPoll.id,
 			voterId,
 			optionIndex,
+			certNIF: data.certNIF || null,
 			topic: topicHex()
 		})
 	}
@@ -291,7 +279,6 @@ async function closePoll(reason, broadcastChange = true) {
 		clearTimeout(state.currentPoll.timer)
 		state.currentPoll.timer = null
 	}
-
 	state.currentPoll.status = 'closed'
 	state.currentPoll.closedAt = Date.now()
 	state.revision += 1
@@ -301,7 +288,7 @@ async function closePoll(reason, broadcastChange = true) {
 			pollId: state.currentPoll.id,
 			reason,
 			topic: topicHex(),
-			poll: clonePoll(state.currentPoll)
+			poll: clonePollFull(state.currentPoll)
 		})
 	}
 	publishState()
@@ -316,7 +303,7 @@ async function handlePeerMessage(message, senderId) {
 			sendToConnection(conn, {
 				type: 'STATE_SYNC',
 				topic: topicHex(),
-				poll: clonePoll(state.currentPoll)
+				poll: clonePollFull(state.currentPoll)
 			})
 		}
 		return
@@ -353,24 +340,18 @@ async function handlePeerMessage(message, senderId) {
 		const voterId = message.voterId || senderId
 		if (voterId in state.currentPoll.votes) return
 		const optionIndex = Number(message.optionIndex)
-		if (
-			!Number.isInteger(optionIndex) ||
-			optionIndex < 0 ||
-			optionIndex >= state.currentPoll.options.length
-		) return
+		if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= state.currentPoll.options.length) return
 		state.currentPoll.votes[voterId] = optionIndex
-		state.currentPoll.counts = computeCounts(
-			state.currentPoll.votes,
-			state.currentPoll.options.length
-		)
+		state.currentPoll.counts = computeCounts(state.currentPoll.votes, state.currentPoll.options.length)
+		if (message.certNIF) state.currentPoll.verifiedVoters[voterId] = message.certNIF
 		state.revision += 1
 		publishState()
-		// Re-broadcast so the gossip reaches peers we are bridging to.
 		broadcast({
 			type: 'VOTE_CAST',
 			pollId: state.currentPoll.id,
 			voterId,
 			optionIndex,
+			certNIF: message.certNIF || null,
 			topic: topicHex()
 		})
 		return
@@ -392,7 +373,7 @@ function setupConnection(connection) {
 		sendToConnection(connection, {
 			type: 'STATE_SYNC',
 			topic: topicHex(),
-			poll: clonePoll(state.currentPoll)
+			poll: clonePollFull(state.currentPoll)
 		})
 	}
 
@@ -430,21 +411,14 @@ function setupConnection(connection) {
 
 async function startSwarm(topic) {
 	await closeSwarm()
-	if (state.currentPoll && state.currentPoll.timer) {
-		clearTimeout(state.currentPoll.timer)
-	}
+	if (state.currentPoll && state.currentPoll.timer) clearTimeout(state.currentPoll.timer)
 	state.currentPoll = null
 	state.revision = 0
 	if (!topic || topic.length !== 32) throw new Error('topic must be a 32-byte buffer')
 	state.topic = topic
 	state.swarm = new Hyperswarm()
 	state.swarm.on('connection', (conn, info) => {
-		console.error(
-			'[worker] peer connected, relayed:',
-			info.relayed,
-			'topic:',
-			topicHex().slice(0, 8)
-		)
+		console.error('[worker] peer connected, relayed:', info.relayed, 'topic:', topicHex().slice(0, 8))
 		setupConnection(conn)
 	})
 	state.swarm.on('error', (error) => {
@@ -452,14 +426,9 @@ async function startSwarm(topic) {
 		send({ type: 'error', code: 'SWARM_ERROR', message: error.message })
 	})
 	state.discovery = state.swarm.join(state.topic, { client: true, server: true })
-	state.discovery
-		.flushed()
-		.then(() => {
-			console.error('[worker] DHT lookup flushed, peers:', state.swarm.connections.size)
-		})
-		.catch((e) => {
-			console.error('[worker] DHT flush error:', e.message)
-		})
+	state.discovery.flushed()
+		.then(() => console.error('[worker] DHT lookup flushed, peers:', state.swarm.connections.size))
+		.catch((e) => console.error('[worker] DHT flush error:', e.message))
 	state.ready = true
 	send({ type: 'READY', role: state.role, topic: topicHex(), peerId: state.localPeerId })
 	publishState()
@@ -497,11 +466,14 @@ async function handleLocalMessage(message) {
 	}
 
 	if (message.type === 'CAST_VOTE') {
-		if (state.role === 'creator') {
+		// Allow relayed mobile votes (have an explicit voterId) even on creator node
+		const isRelayed = typeof message.voterId === 'string' && message.voterId.length > 0
+		if (state.role === 'creator' && !isRelayed) {
 			send({ type: 'error', code: 'FORBIDDEN', message: 'creator cannot vote' })
 			return
 		}
-		await castVote(message, state.localPeerId, true)
+		const voterId = isRelayed ? message.voterId : state.localPeerId
+		await castVote(message, voterId, true)
 		return
 	}
 
@@ -522,7 +494,7 @@ async function handleLocalMessage(message) {
 			revision: state.revision,
 			role: state.role,
 			peers: state.connections.size,
-			poll: clonePoll(state.currentPoll)
+			poll: clonePollPublic(state.currentPoll)
 		})
 		return
 	}
@@ -534,7 +506,6 @@ Bare.IPC.on('data', (chunk) => {
 	state.ipcBuffer += chunk.toString()
 	const lines = state.ipcBuffer.split('\n')
 	state.ipcBuffer = lines.pop()
-
 	for (const line of lines) {
 		if (!line.trim()) continue
 		let message = null
@@ -544,7 +515,6 @@ Bare.IPC.on('data', (chunk) => {
 			send({ type: 'error', code: 'BAD_JSON', message: error.message })
 			continue
 		}
-
 		state.queue = state.queue
 			.then(() => handleLocalMessage(message))
 			.catch((error) => {
@@ -568,7 +538,6 @@ async function main() {
 				state.pendingPollConfig = null
 			}
 		} else {
-			// Voter: do not join any swarm yet. UI must call JOIN with the hash.
 			send({ type: 'AWAITING_TOPIC', role: 'voter', peerId: state.localPeerId })
 			console.log('[worker] voter awaiting topic')
 		}

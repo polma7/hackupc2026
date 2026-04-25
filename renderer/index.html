@@ -5,188 +5,151 @@
     <title>P2P Voting</title>
     <style>
       body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         margin: 0;
         background: #111;
         color: #f2f2f2;
       }
 
-      .container {
-        max-width: 900px;
-        margin: 32px auto;
-        padding: 0 16px 32px;
-      }
+      .container { max-width: 900px; margin: 32px auto; padding: 0 16px 32px; }
 
       h1, h2 { margin: 0 0 8px; }
-
       .muted { color: #aaa; }
 
       .badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 999px;
-        font-size: 12px;
-        font-weight: 600;
-        margin-left: 8px;
+        display: inline-block; padding: 2px 8px; border-radius: 999px;
+        font-size: 12px; font-weight: 600; margin-left: 8px;
       }
-
       .badge.creator { background: #5b3aff; color: #fff; }
       .badge.voter   { background: #2e7d32; color: #fff; }
 
       .card {
-        background: #171717;
-        border: 1px solid #2a2a2a;
-        border-radius: 12px;
-        padding: 16px;
-        margin-top: 16px;
+        background: #171717; border: 1px solid #2a2a2a;
+        border-radius: 12px; padding: 16px; margin-top: 16px;
       }
 
-      .row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-top: 12px;
-      }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
       input, textarea {
-        flex: 1;
-        min-width: 220px;
-        padding: 10px;
-        border-radius: 8px;
-        border: 1px solid #333;
-        background: #1b1b1b;
-        color: #f2f2f2;
+        flex: 1; min-width: 220px; padding: 10px;
+        border-radius: 8px; border: 1px solid #333;
+        background: #1b1b1b; color: #f2f2f2;
       }
 
       button {
-        padding: 10px 14px;
-        border-radius: 8px;
-        border: 1px solid #333;
-        background: #242424;
-        color: #f2f2f2;
-        cursor: pointer;
+        padding: 10px 14px; border-radius: 8px; border: 1px solid #333;
+        background: #242424; color: #f2f2f2; cursor: pointer;
       }
-
-      button:hover  { background: #303030; }
+      button:hover    { background: #303030; }
       button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+      .btn-primary {
+        background: #1a3a1c; border-color: #2e7d32; color: #fff;
+      }
+      .btn-primary:hover { background: #1f4a22; }
+
       pre {
-        padding: 12px;
-        border-radius: 8px;
-        background: #141414;
-        border: 1px solid #2a2a2a;
-        overflow: auto;
-        word-break: break-all;
-        white-space: pre-wrap;
+        padding: 12px; border-radius: 8px; background: #141414;
+        border: 1px solid #2a2a2a; overflow: auto;
+        word-break: break-all; white-space: pre-wrap;
       }
 
       ul { padding-left: 20px; }
-
-      .options button {
-        display: block;
-        margin: 8px 0;
-        width: 100%;
-        text-align: left;
-      }
-
       .hidden { display: none; }
 
-      .countdown {
-        font-variant-numeric: tabular-nums;
-        font-weight: 600;
-      }
+      .countdown { font-variant-numeric: tabular-nums; font-weight: 600; }
 
       /* ── Certificate overlay ── */
       #cert-overlay {
-        position: fixed;
-        inset: 0;
-        background: #0d0d0d;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
+        position: fixed; inset: 0; background: #0d0d0d;
+        display: flex; align-items: center; justify-content: center; z-index: 1000;
       }
-
       .cert-box {
-        background: #171717;
-        border: 1px solid #2a2a2a;
-        border-radius: 16px;
-        padding: 32px;
-        max-width: 460px;
-        width: 90%;
+        background: #171717; border: 1px solid #2a2a2a;
+        border-radius: 16px; padding: 32px; max-width: 460px; width: 90%;
       }
-
       .cert-box h1 { font-size: 22px; margin-bottom: 4px; }
-
       .cert-file-area {
-        border: 1px dashed #333;
-        border-radius: 10px;
-        padding: 20px;
-        text-align: center;
-        margin-top: 16px;
-        cursor: pointer;
-        transition: border-color 0.15s;
+        border: 1px dashed #333; border-radius: 10px; padding: 20px;
+        text-align: center; margin-top: 16px; cursor: pointer; transition: border-color 0.15s;
       }
-
-      .cert-file-area:hover { border-color: #555; }
-      .cert-file-area.has-file { border-color: #2e7d32; }
-
-      .cert-file-icon { font-size: 28px; margin-bottom: 8px; }
-      .cert-file-name { font-size: 13px; font-weight: 600; word-break: break-all; }
-
-      .cert-status {
-        margin-top: 12px;
-        font-size: 14px;
-        min-height: 20px;
-        text-align: center;
-      }
+      .cert-file-area:hover     { border-color: #555; }
+      .cert-file-area.has-file  { border-color: #2e7d32; }
+      .cert-file-icon  { font-size: 28px; margin-bottom: 8px; }
+      .cert-file-name  { font-size: 13px; font-weight: 600; word-break: break-all; }
+      .cert-status     { margin-top: 12px; font-size: 14px; min-height: 20px; text-align: center; }
 
       /* ── Identity badge ── */
       #identity-badge {
-        border-color: #1b4d1e;
-        background: #0f1f10;
-        display: flex;
-        align-items: center;
-        gap: 14px;
+        border-color: #1b4d1e; background: #0f1f10;
+        display: flex; align-items: center; gap: 14px;
       }
-
       .identity-icon { font-size: 28px; flex-shrink: 0; }
-
       .identity-info { flex: 1; min-width: 0; }
       .identity-name { font-weight: 600; font-size: 15px; }
       .identity-meta { font-size: 12px; color: #7cb87f; margin-top: 2px; }
+
+      /* ── QR codes ── */
+      #qr-img, #mobile-qr-img {
+        display: block; width: 160px; height: 160px;
+        border-radius: 8px; margin-top: 12px; image-rendering: pixelated;
+      }
+
+      /* ── Poll creation form ── */
+      .option-row { display: flex; gap: 8px; margin-top: 8px; }
+      .option-row input { flex: 1; }
+      .btn-remove {
+        padding: 8px 10px; font-size: 16px; line-height: 1;
+        background: #2a1a1a; border-color: #5a2a2a; color: #f44336; flex-shrink: 0;
+      }
+      .btn-remove:hover { background: #3a2020; }
+
+      /* ── Vote bars ── */
+      .vote-bar-wrap { margin: 10px 0; }
+      .vote-bar-label {
+        display: flex; justify-content: space-between;
+        font-size: 13px; margin-bottom: 4px;
+      }
+      .vote-bar-track {
+        background: #2a2a2a; border-radius: 4px; height: 10px; overflow: hidden;
+      }
+      .vote-bar-fill {
+        height: 100%; background: #5b3aff; border-radius: 4px;
+        transition: width 0.4s ease;
+      }
+      .vote-bar-fill.voted { background: #2e7d32; }
+
+      /* ── Verified voters ── */
+      .voter-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .voter-chip {
+        font-size: 11px; background: #1a2a1a; border: 1px solid #2e4d2e;
+        border-radius: 999px; padding: 2px 10px; color: #7cb87f;
+      }
     </style>
   </head>
   <body>
 
-    <!-- Certificate verification screen (shown on startup) -->
+    <!-- Certificate verification screen -->
     <div id="cert-overlay">
       <div class="cert-box">
         <h1>P2P Voting</h1>
         <p class="muted" style="margin-bottom:24px;">Verificación de identidad requerida para continuar.</p>
-
         <h2 style="font-size:15px; color:#aaa; font-weight:400; margin-bottom:4px;">CERTIFICADO DIGITAL</h2>
-        <p class="muted" style="font-size:13px; margin-bottom:0;">Selecciona tu archivo <code>.p12</code> o <code>.pfx</code> e introduce la contraseña.</p>
-
+        <p class="muted" style="font-size:13px; margin-bottom:0;">
+          Selecciona tu archivo <code>.p12</code> o <code>.pfx</code> e introduce la contraseña.
+        </p>
         <div id="cert-file-area" class="cert-file-area">
           <div class="cert-file-icon">📄</div>
           <div id="cert-file-name" class="cert-file-name muted">Haz clic para seleccionar archivo</div>
         </div>
         <input type="file" id="cert-file-input" accept=".p12,.pfx" style="display:none;">
-
         <div class="row" style="margin-top:12px;">
           <input type="password" id="cert-password" placeholder="Contraseña del certificado" autocomplete="current-password" />
         </div>
-
         <div class="row" style="margin-top:12px;">
-          <button id="cert-verify-btn" disabled style="flex:1; background:#1a3a1c; border-color:#2e7d32; color:#fff;">
-            Verificar identidad
-          </button>
+          <button id="cert-verify-btn" class="btn-primary" disabled style="flex:1;">Verificar identidad</button>
         </div>
-
         <div id="cert-status" class="cert-status muted"></div>
-
         <p class="muted" style="font-size:11px; margin-top:20px; text-align:center;">
           En producción se usarían certificados oficiales emitidos por la FNMT o el DNIe.
         </p>
@@ -198,7 +161,7 @@
       <h1>P2P Voting<span id="role-badge" class="badge"></span></h1>
       <div class="muted" id="status">Starting...</div>
 
-      <!-- Identity badge (shown after cert verification) -->
+      <!-- Identity badge -->
       <div id="identity-badge" class="card hidden">
         <div class="identity-icon">✓</div>
         <div class="identity-info">
@@ -207,6 +170,7 @@
         </div>
       </div>
 
+      <!-- Topic / hash card -->
       <div id="topic-card" class="card">
         <h2 id="topic-heading">Topic to share</h2>
         <div class="muted" id="topic-help">Share this hash with voters.</div>
@@ -214,27 +178,70 @@
         <div class="row">
           <button id="copy-topic-btn">Copy hash</button>
         </div>
+        <img id="qr-img" class="hidden" alt="QR del hash" />
         <div class="muted" style="margin-top:12px">Peers connected</div>
         <pre id="peers">0</pre>
       </div>
 
+      <!-- Poll creation form (creator only, before poll exists) -->
+      <div id="create-card" class="card hidden">
+        <h2>Crear votación</h2>
+        <p class="muted">Define la pregunta, las opciones y la duración.</p>
+
+        <div style="margin-top:12px;">
+          <label class="muted" style="font-size:12px;">PREGUNTA</label>
+          <input id="poll-question" type="text" placeholder="¿Cuál es tu opción favorita?" style="margin-top:6px; width:100%; box-sizing:border-box;" />
+        </div>
+
+        <div style="margin-top:16px;">
+          <label class="muted" style="font-size:12px;">OPCIONES</label>
+          <div id="options-list"></div>
+          <button id="add-option-btn" style="margin-top:8px; font-size:13px;">+ Añadir opción</button>
+        </div>
+
+        <div style="margin-top:16px;">
+          <label class="muted" style="font-size:12px;">DURACIÓN (segundos)</label>
+          <input id="poll-duration" type="number" min="10" max="3600" value="120"
+                 style="margin-top:6px; width:120px;" />
+        </div>
+
+        <div class="row" style="margin-top:16px;">
+          <button id="create-poll-btn" class="btn-primary">Iniciar votación</button>
+        </div>
+        <div id="create-status" class="muted" style="margin-top:8px; font-size:13px;"></div>
+      </div>
+
+      <!-- Join card (voter only) -->
       <div id="join-card" class="card hidden">
-        <h2>Join a poll</h2>
-        <div class="muted">Paste the 64-char hex hash you received from the creator.</div>
+        <h2>Unirse a una votación</h2>
+        <div class="muted">Pega el hash de 64 caracteres que te ha dado el creador.</div>
         <div class="row">
-          <input id="topic-input" type="text" placeholder="Paste 64 hex hash here" autocomplete="off" />
-          <button id="join-btn">Join</button>
+          <input id="topic-input" type="text" placeholder="Pega el hash aquí" autocomplete="off" />
+          <button id="join-btn">Unirse</button>
         </div>
       </div>
 
-      <div id="poll-card" class="card hidden">
-        <h2>Active poll</h2>
-        <div id="poll-state" class="muted">Connecting...</div>
-        <div id="poll-body"></div>
+      <!-- Mobile voting QR card (creator only, shown when poll is active) -->
+      <div id="mobile-card" class="card hidden">
+        <h2>Voto móvil</h2>
+        <p class="muted">Escanea con el móvil para votar desde el navegador (misma red WiFi).</p>
+        <img id="mobile-qr-img" alt="QR voto móvil" />
+        <div id="mobile-url" class="muted" style="font-size:12px; margin-top:8px; word-break:break-all;"></div>
       </div>
 
+      <!-- Active poll card -->
+      <div id="poll-card" class="card hidden">
+        <h2>Votación activa</h2>
+        <div id="poll-state" class="muted">Conectando...</div>
+        <div id="poll-body"></div>
+        <div id="export-wrap" class="hidden" style="margin-top:16px;">
+          <button id="export-btn" class="btn-primary">Exportar resultados certificados</button>
+        </div>
+      </div>
+
+      <!-- Events log -->
       <div class="card">
-        <h2>Events</h2>
+        <h2>Eventos</h2>
         <ul id="events"></ul>
       </div>
     </div>

@@ -44,5 +44,9 @@ contextBridge.exposeInMainWorld('bridge', {
   },
   verifyCert: (arrayBuffer, password) => {
     return ipcRenderer.invoke('cert:verify', { data: Buffer.from(arrayBuffer), password })
-  }
+  },
+  generateQR: (text) => ipcRenderer.invoke('qr:generate', text),
+  saveExport: (data, filename) => ipcRenderer.invoke('export:save', { data, filename }),
+  syncState: (poll) => ipcRenderer.invoke('state:sync', poll),
+  getMobileUrl: () => ipcRenderer.invoke('mobile:getUrl'),
 })
