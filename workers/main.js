@@ -8,8 +8,20 @@ function randomBuffer(size) {
 	return buf
 }
 
+let bootConfig = { role: 'voter', pollConfig: null }
+try {
+	if (Bare.argv[3]) bootConfig = JSON.parse(Bare.argv[3])
+} catch {
+}
+
+function isHexTopic(value) {
+	return typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value)
+}
+
 const state = {
-	topic: randomBuffer(32),
+	role: bootConfig.role === 'creator' ? 'creator' : 'voter',
+	pendingPollConfig: bootConfig.pollConfig || null,
+	topic: null,
 	localPeerId: randomBuffer(16).toString('hex'),
 	swarm: null,
 	discovery: null,
@@ -26,11 +38,7 @@ function send(message) {
 }
 
 function topicHex() {
-	return state.topic.toString('hex')
-}
-
-function isHexTopic(value) {
-	return typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value)
+	return state.topic ? state.topic.toString('hex') : ''
 }
 
 function clonePoll(poll) {
@@ -63,6 +71,7 @@ function publishState() {
 	const pollClone = clonePoll(state.currentPoll)
 	send({
 		type: 'STATE',
+		role: state.role,
 		topic: topicHex(),
 		poll: pollClone,
 		revision: state.revision,
@@ -70,25 +79,52 @@ function publishState() {
 	})
 }
 
-function voteCount(poll) {
-	if (!poll || !poll.votes) return 0
-	return Object.keys(poll.votes).length
+// CRDT-style merge: union of votes, prefer first-seen choice per voter, closed wins.
+function mergePolls(local, remote) {
+	if (!remote) return local
+	if (!local) return { ...remote, timer: null }
+	if (local.id !== remote.id) {
+		// Different polls. Prefer the open one; otherwise the older.
+		if (local.status === 'open' && remote.status !== 'open') return local
+		if (remote.status === 'open' && local.status !== 'open') return { ...remote, timer: null }
+		return local.createdAt <= remote.createdAt ? local : { ...remote, timer: null }
+	}
+
+	const mergedVotes = { ...local.votes }
+	for (const [voterId, choice] of Object.entries(remote.votes || {})) {
+		if (!(voterId in mergedVotes)) mergedVotes[voterId] = choice
+	}
+
+	const closed = local.status === 'closed' || remote.status === 'closed'
+	let closedAt = null
+	if (closed) {
+		const candidates = [local.closedAt, remote.closedAt].filter((v) => Number.isFinite(v))
+		closedAt = candidates.length ? Math.min(...candidates) : Date.now()
+	}
+
+	return {
+		...local,
+		votes: mergedVotes,
+		counts: computeCounts(mergedVotes, local.options.length),
+		status: closed ? 'closed' : 'open',
+		closedAt,
+		timer: local.timer || null
+	}
 }
 
-function shouldReplacePoll(currentPoll, incomingPoll) {
-	if (!incomingPoll) return false
-	if (!currentPoll) return true
-	if (currentPoll.id !== incomingPoll.id) return false
-
-	const currentVotes = voteCount(currentPoll)
-	const incomingVotes = voteCount(incomingPoll)
-	if (incomingVotes > currentVotes) return true
-	if (incomingVotes < currentVotes) return false
-
-	if (currentPoll.status === 'closed' && incomingPoll.status !== 'closed') return false
-	if (incomingPoll.status === 'closed' && currentPoll.status !== 'closed') return true
-
-	return (incomingPoll.closedAt || 0) >= (currentPoll.closedAt || 0)
+function pollsEqual(a, b) {
+	if (a === b) return true
+	if (!a || !b) return false
+	if (a.id !== b.id) return false
+	if (a.status !== b.status) return false
+	if ((a.closedAt || null) !== (b.closedAt || null)) return false
+	const aKeys = Object.keys(a.votes || {})
+	const bKeys = Object.keys(b.votes || {})
+	if (aKeys.length !== bKeys.length) return false
+	for (const key of aKeys) {
+		if (a.votes[key] !== b.votes[key]) return false
+	}
+	return true
 }
 
 function sendToConnection(connection, message) {
@@ -165,15 +201,9 @@ function createPollPayload(question, options, timeoutMs) {
 		: []
 	const duration = Number(timeoutMs)
 
-	if (!cleanQuestion) {
-		throw new Error('question is required')
-	}
-	if (cleanOptions.length < 2) {
-		throw new Error('at least two options are required')
-	}
-	if (!Number.isFinite(duration) || duration < 5000) {
-		throw new Error('timeout must be at least 5000 ms')
-	}
+	if (!cleanQuestion) throw new Error('question is required')
+	if (cleanOptions.length < 2) throw new Error('at least two options are required')
+	if (!Number.isFinite(duration) || duration < 5000) throw new Error('timeout must be at least 5000 ms')
 
 	return {
 		id: randomBuffer(16).toString('hex'),
@@ -188,9 +218,7 @@ function isCurrentPollOpen() {
 }
 
 async function createPoll(data, createdBy, broadcastChange) {
-	if (isCurrentPollOpen()) {
-		throw new Error('there is already an active poll')
-	}
+	if (isCurrentPollOpen()) throw new Error('there is already an active poll')
 
 	const payload = createPollPayload(data.question, data.options, data.timeoutMs)
 	const now = Date.now()
@@ -219,18 +247,30 @@ async function createPoll(data, createdBy, broadcastChange) {
 }
 
 async function castVote(data, voterId, broadcastChange) {
-	if (!isCurrentPollOpen()) {
-		throw new Error('there is no active poll')
-	}
+	if (state.role === 'creator') throw new Error('creator node cannot vote')
+	if (!isCurrentPollOpen()) throw new Error('there is no active poll')
 
 	const optionIndex = Number(data.optionIndex)
-	if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= state.currentPoll.options.length) {
+	if (
+		!Number.isInteger(optionIndex) ||
+		optionIndex < 0 ||
+		optionIndex >= state.currentPoll.options.length
+	) {
 		throw new Error('invalid optionIndex')
 	}
 
-	const previous = state.currentPoll.votes[voterId]
+	// Vote-once semantics: keep first vote per voterId.
+	if (voterId in state.currentPoll.votes) {
+		// No change, but still publish (idempotent).
+		publishState()
+		return
+	}
+
 	state.currentPoll.votes[voterId] = optionIndex
-	state.currentPoll.counts = computeCounts(state.currentPoll.votes, state.currentPoll.options.length)
+	state.currentPoll.counts = computeCounts(
+		state.currentPoll.votes,
+		state.currentPoll.options.length
+	)
 	state.revision += 1
 
 	if (broadcastChange) {
@@ -239,7 +279,6 @@ async function castVote(data, voterId, broadcastChange) {
 			pollId: state.currentPoll.id,
 			voterId,
 			optionIndex,
-			previous,
 			topic: topicHex()
 		})
 	}
@@ -272,50 +311,68 @@ async function handlePeerMessage(message, senderId) {
 	if (!message || typeof message.type !== 'string') return
 
 	if (message.type === 'HELLO') {
-		sendToConnection(state.connections.get(senderId), {
-			type: 'STATE_SYNC',
-			topic: topicHex(),
-			poll: clonePoll(state.currentPoll)
-		})
+		const conn = state.connections.get(senderId)
+		if (conn) {
+			sendToConnection(conn, {
+				type: 'STATE_SYNC',
+				topic: topicHex(),
+				poll: clonePoll(state.currentPoll)
+			})
+		}
 		return
 	}
 
 	if (message.type === 'STATE_SYNC') {
 		if (!message.poll) return
-		if (shouldReplacePoll(state.currentPoll, message.poll)) {
-			const poll = { ...message.poll, timer: null }
-			setCurrentPoll(poll)
+		const merged = mergePolls(state.currentPoll, message.poll)
+		if (!pollsEqual(state.currentPoll, merged)) {
+			setCurrentPoll(merged)
 			publishState()
 		}
 		return
 	}
 
 	if (message.type === 'CREATE_POLL') {
-		if (isCurrentPollOpen()) {
-			if (state.currentPoll && message.poll && state.currentPoll.id === message.poll.id) {
-				if (shouldReplacePoll(state.currentPoll, message.poll)) {
-					setCurrentPoll({ ...message.poll, timer: null })
-					publishState()
-				}
-			}
-			return
-		}
-
-		if (message.poll && message.poll.id) {
-			const poll = { ...message.poll, timer: null }
-			setCurrentPoll(poll)
+		if (!message.poll || !message.poll.id) return
+		if (!state.currentPoll) {
+			setCurrentPoll({ ...message.poll, timer: null })
 			publishState()
 			return
 		}
-
-		await createPoll(message, message.createdBy || senderId, false)
+		const merged = mergePolls(state.currentPoll, message.poll)
+		if (!pollsEqual(state.currentPoll, merged)) {
+			setCurrentPoll(merged)
+			publishState()
+		}
 		return
 	}
 
 	if (message.type === 'VOTE_CAST') {
 		if (!isCurrentPollOpen()) return
 		if (message.pollId !== state.currentPoll.id) return
-		await castVote(message, message.voterId || senderId, false)
+		const voterId = message.voterId || senderId
+		if (voterId in state.currentPoll.votes) return
+		const optionIndex = Number(message.optionIndex)
+		if (
+			!Number.isInteger(optionIndex) ||
+			optionIndex < 0 ||
+			optionIndex >= state.currentPoll.options.length
+		) return
+		state.currentPoll.votes[voterId] = optionIndex
+		state.currentPoll.counts = computeCounts(
+			state.currentPoll.votes,
+			state.currentPoll.options.length
+		)
+		state.revision += 1
+		publishState()
+		// Re-broadcast so the gossip reaches peers we are bridging to.
+		broadcast({
+			type: 'VOTE_CAST',
+			pollId: state.currentPoll.id,
+			voterId,
+			optionIndex,
+			topic: topicHex()
+		})
 		return
 	}
 
@@ -332,7 +389,11 @@ function setupConnection(connection) {
 	send({ type: 'PEERS', count: state.connections.size, topic: topicHex() })
 	sendToConnection(connection, { type: 'HELLO', topic: topicHex(), peerId: state.localPeerId })
 	if (state.currentPoll) {
-		sendToConnection(connection, { type: 'STATE_SYNC', topic: topicHex(), poll: clonePoll(state.currentPoll) })
+		sendToConnection(connection, {
+			type: 'STATE_SYNC',
+			topic: topicHex(),
+			poll: clonePoll(state.currentPoll)
+		})
 	}
 
 	let buffer = ''
@@ -367,17 +428,23 @@ function setupConnection(connection) {
 	})
 }
 
-async function startSwarm(nextTopic) {
+async function startSwarm(topic) {
 	await closeSwarm()
 	if (state.currentPoll && state.currentPoll.timer) {
 		clearTimeout(state.currentPoll.timer)
 	}
 	state.currentPoll = null
 	state.revision = 0
-	state.topic = nextTopic || randomBuffer(32)
+	if (!topic || topic.length !== 32) throw new Error('topic must be a 32-byte buffer')
+	state.topic = topic
 	state.swarm = new Hyperswarm()
 	state.swarm.on('connection', (conn, info) => {
-		console.error('[worker] peer connected, relayed:', info.relayed, 'topic:', topicHex().slice(0, 8))
+		console.error(
+			'[worker] peer connected, relayed:',
+			info.relayed,
+			'topic:',
+			topicHex().slice(0, 8)
+		)
 		setupConnection(conn)
 	})
 	state.swarm.on('error', (error) => {
@@ -385,45 +452,64 @@ async function startSwarm(nextTopic) {
 		send({ type: 'error', code: 'SWARM_ERROR', message: error.message })
 	})
 	state.discovery = state.swarm.join(state.topic, { client: true, server: true })
-	state.discovery.flushed().then(() => {
-		console.error('[worker] DHT lookup flushed, peers found:', state.swarm.connections.size)
-	}).catch((e) => {
-		console.error('[worker] DHT flush error:', e.message)
-	})
+	state.discovery
+		.flushed()
+		.then(() => {
+			console.error('[worker] DHT lookup flushed, peers:', state.swarm.connections.size)
+		})
+		.catch((e) => {
+			console.error('[worker] DHT flush error:', e.message)
+		})
 	state.ready = true
-	send({ type: 'READY', topic: topicHex(), peerId: state.localPeerId })
+	send({ type: 'READY', role: state.role, topic: topicHex(), peerId: state.localPeerId })
 	publishState()
 }
 
 async function handleLocalMessage(message) {
-	if (!state.ready) {
-		send({ type: 'error', code: 'NOT_READY', message: 'Worker is not ready yet' })
-		return
-	}
-
 	if (message.type === 'JOIN') {
+		if (state.role === 'creator') {
+			send({ type: 'error', code: 'FORBIDDEN', message: 'creator does not join external topics' })
+			return
+		}
 		const raw = typeof message.key === 'string' ? message.key.trim() : ''
 		const match = raw.match(/[0-9a-fA-F]{64}/)
 		const key = match ? match[0].toLowerCase() : ''
 		if (!isHexTopic(key)) {
-			send({ type: 'error', code: 'INVALID_KEY', message: 'Topic must be 64 hex characters' })
+			send({ type: 'error', code: 'INVALID_KEY', message: 'topic must be 64 hex characters' })
 			return
 		}
 		await startSwarm(Buffer.from(key, 'hex'))
 		return
 	}
 
+	if (!state.ready) {
+		send({ type: 'error', code: 'NOT_READY', message: 'Worker is not ready yet' })
+		return
+	}
+
 	if (message.type === 'CREATE_POLL') {
+		if (state.role !== 'creator') {
+			send({ type: 'error', code: 'FORBIDDEN', message: 'only creator can create polls' })
+			return
+		}
 		await createPoll(message, state.localPeerId, true)
 		return
 	}
 
 	if (message.type === 'CAST_VOTE') {
+		if (state.role === 'creator') {
+			send({ type: 'error', code: 'FORBIDDEN', message: 'creator cannot vote' })
+			return
+		}
 		await castVote(message, state.localPeerId, true)
 		return
 	}
 
 	if (message.type === 'CLOSE_POLL') {
+		if (state.role !== 'creator') {
+			send({ type: 'error', code: 'FORBIDDEN', message: 'only creator can force-close' })
+			return
+		}
 		await closePoll(message.reason || 'closed', true)
 		return
 	}
@@ -434,12 +520,14 @@ async function handleLocalMessage(message) {
 			topic: topicHex(),
 			peerId: state.localPeerId,
 			revision: state.revision,
+			role: state.role,
+			peers: state.connections.size,
 			poll: clonePoll(state.currentPoll)
 		})
 		return
 	}
 
-	send({ type: 'error', code: 'UNKNOWN_TYPE', message: 'Use JOIN, CREATE_POLL, CAST_VOTE, CLOSE_POLL or PING' })
+	send({ type: 'error', code: 'UNKNOWN_TYPE', message: 'Unsupported message type' })
 }
 
 Bare.IPC.on('data', (chunk) => {
@@ -467,8 +555,23 @@ Bare.IPC.on('data', (chunk) => {
 
 async function main() {
 	try {
-		await startSwarm(state.topic)
-		console.log('[worker] voting swarm ready:', topicHex())
+		if (state.role === 'creator') {
+			await startSwarm(randomBuffer(32))
+			console.log('[worker] creator swarm ready:', topicHex())
+			if (state.pendingPollConfig) {
+				try {
+					await createPoll(state.pendingPollConfig, state.localPeerId, true)
+					console.log('[worker] creator auto-created poll:', state.currentPoll.id)
+				} catch (error) {
+					send({ type: 'error', code: 'AUTOPOLL_FAILED', message: error.message })
+				}
+				state.pendingPollConfig = null
+			}
+		} else {
+			// Voter: do not join any swarm yet. UI must call JOIN with the hash.
+			send({ type: 'AWAITING_TOPIC', role: 'voter', peerId: state.localPeerId })
+			console.log('[worker] voter awaiting topic')
+		}
 	} catch (error) {
 		console.error('[worker] startup failed:', error.message)
 		send({ type: 'error', code: 'STARTUP_FAILED', message: error.message })

@@ -3,6 +3,9 @@ contextBridge.exposeInMainWorld('bridge', {
   pkg() {
     return ipcRenderer.sendSync('pkg')
   },
+  config() {
+    return ipcRenderer.sendSync('config')
+  },
   applyUpdate: () => ipcRenderer.invoke('pear:applyUpdate'),
   appAfterUpdate: () => ipcRenderer.invoke('app:afterUpdate'),
   onPearEvent: (name, listener) => {

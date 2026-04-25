@@ -20,7 +20,11 @@ const appName = productName ?? name
 const cmd = command(
   appName,
   flag('--storage <dir>', 'pass custom storage to pear-runtime'),
-  flag('--no-updates', 'start without OTA updates')
+  flag('--no-updates', 'start without OTA updates'),
+  flag('--create', 'start as creator node and auto-create a poll'),
+  flag('--question <text>', 'poll question (with --create)'),
+  flag('--options <list>', 'comma-separated poll options (with --create)'),
+  flag('--timeout <seconds>', 'poll duration in seconds (with --create)')
 )
 
 cmd.parse(app.isPackaged ? process.argv.slice(1) : process.argv.slice(2))
@@ -28,10 +32,30 @@ cmd.parse(app.isPackaged ? process.argv.slice(1) : process.argv.slice(2))
 const pearStore = cmd.flags.storage
 const updates = cmd.flags.updates
 
+const isCreator = cmd.flags.create === true
+const role = isCreator ? 'creator' : 'voter'
+const pollConfig = isCreator
+  ? {
+      question: typeof cmd.flags.question === 'string' ? cmd.flags.question : 'Untitled poll',
+      options:
+        typeof cmd.flags.options === 'string'
+          ? cmd.flags.options
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : ['Yes', 'No'],
+      timeoutMs: Math.max(5, Number(cmd.flags.timeout) || 60) * 1000
+    }
+  : null
+
 if (pearStore) app.setPath('userData', pearStore)
 
 ipcMain.on('pkg', (evt) => {
   evt.returnValue = pkg
+})
+
+ipcMain.on('config', (evt) => {
+  evt.returnValue = { role, pollConfig }
 })
 
 function getPear() {
@@ -91,7 +115,8 @@ function sendToAll(name, data) {
 function getWorker(specifier) {
   if (workers.has(specifier)) return workers.get(specifier)
   const pear = getPear()
-  const worker = pear.run(require.resolve('..' + specifier), [pear.storage])
+  const workerConfig = JSON.stringify({ role, pollConfig })
+  const worker = pear.run(require.resolve('..' + specifier), [pear.storage, workerConfig])
   function sendWorkerStdout(data) {
     sendToAll('pear:worker:stdout:' + specifier, data)
   }

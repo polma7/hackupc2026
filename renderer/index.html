@@ -27,6 +27,25 @@
         color: #aaa;
       }
 
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 8px;
+      }
+
+      .badge.creator {
+        background: #5b3aff;
+        color: #fff;
+      }
+
+      .badge.voter {
+        background: #2e7d32;
+        color: #fff;
+      }
+
       .card {
         background: #171717;
         border: 1px solid #2a2a2a;
@@ -53,11 +72,6 @@
         color: #f2f2f2;
       }
 
-      textarea {
-        min-height: 70px;
-        resize: vertical;
-      }
-
       button {
         padding: 10px 14px;
         border-radius: 8px;
@@ -71,12 +85,19 @@
         background: #303030;
       }
 
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
       pre {
         padding: 12px;
         border-radius: 8px;
         background: #141414;
         border: 1px solid #2a2a2a;
         overflow: auto;
+        word-break: break-all;
+        white-space: pre-wrap;
       }
 
       ul {
@@ -89,42 +110,45 @@
         width: 100%;
         text-align: left;
       }
+
+      .hidden {
+        display: none;
+      }
+
+      .countdown {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>P2P Voting</h1>
+      <h1>P2P Voting<span id="role-badge" class="badge"></span></h1>
       <div class="muted" id="status">Starting...</div>
 
-      <div class="card">
-        <h2>Join topic</h2>
-        <div class="row">
-          <input id="topic-input" type="text" placeholder="Paste 64 hex topic here" />
-          <button id="join-btn">Join</button>
-        </div>
-        <div class="muted">Current topic</div>
+      <div id="topic-card" class="card">
+        <h2 id="topic-heading">Topic to share</h2>
+        <div class="muted" id="topic-help">Share this hash with voters.</div>
         <pre id="topic">...</pre>
-        <div class="muted">Peers</div>
+        <div class="row">
+          <button id="copy-topic-btn">Copy hash</button>
+        </div>
+        <div class="muted" style="margin-top:12px">Peers connected</div>
         <pre id="peers">0</pre>
       </div>
 
-      <div class="card">
-        <h2>Create vote</h2>
+      <div id="join-card" class="card hidden">
+        <h2>Join a poll</h2>
+        <div class="muted">Paste the 64-char hex hash you received from the creator.</div>
         <div class="row">
-          <input id="question-input" type="text" placeholder="Question" />
-        </div>
-        <div class="row">
-          <textarea id="options-input" placeholder="Options, separated by commas"></textarea>
-        </div>
-        <div class="row">
-          <input id="timeout-input" type="number" min="5" value="30" placeholder="Timeout in seconds" />
-          <button id="create-btn">Create poll</button>
+          <input id="topic-input" type="text" placeholder="Paste 64 hex hash here" autocomplete="off" />
+          <button id="join-btn">Join</button>
         </div>
       </div>
 
-      <div class="card">
+      <div id="poll-card" class="card hidden">
         <h2>Active poll</h2>
-        <div id="poll-state" class="muted">No active poll</div>
+        <div id="poll-state" class="muted">Connecting...</div>
         <div id="poll-body"></div>
       </div>
 
