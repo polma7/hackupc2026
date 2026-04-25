@@ -199,7 +199,7 @@ app.on('open-url', (evt, url) => {
   handleDeepLink(url)
 })
 
-const lock = app.requestSingleInstanceLock()
+const lock = pearStore ? true : app.requestSingleInstanceLock()
 
 if (!lock) {
   app.quit()

@@ -31,6 +31,11 @@ contextBridge.exposeInMainWorld('bridge', {
     ipcRenderer.on('pear:worker:exit:' + specifier, wrap)
     return () => ipcRenderer.removeListener('pear:worker:exit:' + specifier, wrap)
   },
+  onWorkerExitSafe: (specifier, listener) => {
+    const wrap = (evt, code) => listener(code)
+    ipcRenderer.on('pear:worker:exit:' + specifier, wrap)
+    return () => ipcRenderer.removeListener('pear:worker:exit:' + specifier, wrap)
+  },
   writeWorkerIPC: (specifier, data) => {
     return ipcRenderer.invoke('pear:worker:writeIPC:' + specifier, data)
   }

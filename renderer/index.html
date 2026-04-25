@@ -2,46 +2,136 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Hello Pear</title>
+    <title>P2P Voting</title>
     <style>
       body {
         font-family:
           -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
         margin: 0;
-        background: linear-gradient(135deg, #21c437 0%, #0e4f15 100%);
-        color: white;
+        background: #111;
+        color: #f2f2f2;
       }
-      h1 {
-        font-size: 48px;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+
+      .container {
+        max-width: 900px;
+        margin: 32px auto;
+        padding: 0 16px 32px;
       }
-      #update-btn {
-        display: none;
-        margin-top: 20px;
-        padding: 12px 24px;
-        font-size: 18px;
-        border: 2px solid white;
+
+      h1,
+      h2 {
+        margin: 0 0 8px;
+      }
+
+      .muted {
+        color: #aaa;
+      }
+
+      .card {
+        background: #171717;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 16px;
+        margin-top: 16px;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+
+      input,
+      textarea {
+        flex: 1;
+        min-width: 220px;
+        padding: 10px;
         border-radius: 8px;
-        background: green;
-        color: white;
+        border: 1px solid #333;
+        background: #1b1b1b;
+        color: #f2f2f2;
+      }
+
+      textarea {
+        min-height: 70px;
+        resize: vertical;
+      }
+
+      button {
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid #333;
+        background: #242424;
+        color: #f2f2f2;
         cursor: pointer;
       }
-      #update-btn:hover {
-        background: greenyellow;
+
+      button:hover {
+        background: #303030;
       }
-      .container {
-        text-align: center;
+
+      pre {
+        padding: 12px;
+        border-radius: 8px;
+        background: #141414;
+        border: 1px solid #2a2a2a;
+        overflow: auto;
+      }
+
+      ul {
+        padding-left: 20px;
+      }
+
+      .options button {
+        display: block;
+        margin: 8px 0;
+        width: 100%;
+        text-align: left;
       }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1 id="v">v</h1>
-      <button id="update-btn">Apply update</button>
+      <h1>P2P Voting</h1>
+      <div class="muted" id="status">Starting...</div>
+
+      <div class="card">
+        <h2>Join topic</h2>
+        <div class="row">
+          <input id="topic-input" type="text" placeholder="Paste 64 hex topic here" />
+          <button id="join-btn">Join</button>
+        </div>
+        <div class="muted">Current topic</div>
+        <pre id="topic">...</pre>
+        <div class="muted">Peers</div>
+        <pre id="peers">0</pre>
+      </div>
+
+      <div class="card">
+        <h2>Create vote</h2>
+        <div class="row">
+          <input id="question-input" type="text" placeholder="Question" />
+        </div>
+        <div class="row">
+          <textarea id="options-input" placeholder="Options, separated by commas"></textarea>
+        </div>
+        <div class="row">
+          <input id="timeout-input" type="number" min="5" value="30" placeholder="Timeout in seconds" />
+          <button id="create-btn">Create poll</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Active poll</h2>
+        <div id="poll-state" class="muted">No active poll</div>
+        <div id="poll-body"></div>
+      </div>
+
+      <div class="card">
+        <h2>Events</h2>
+        <ul id="events"></ul>
+      </div>
     </div>
     <script type="module" src="app.js"></script>
   </body>

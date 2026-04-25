@@ -1,53 +1,188 @@
 const bridge = window.bridge
 const decoder = new TextDecoder('utf-8')
 
-document.getElementById('v').innerText += bridge.pkg().version
-
-bridge.onPearEvent('updating', () => {
-  document.getElementById('v').innerText = 'UPDATING...'
-})
-
-bridge.onPearEvent('updated', () => {
-  document.getElementById('v').innerText = 'Update ready!'
-  const btn = document.getElementById('update-btn')
-  btn.style.display = 'inline-block'
-  btn.onclick = async () => {
-    btn.disabled = true
-    btn.innerText = 'Updating...'
-    try {
-      await bridge.applyUpdate()
-      await bridge.appAfterUpdate()
-    } catch (err) {
-      document.getElementById('v').innerText = 'Update failed: ' + err.message
-      btn.style.display = 'none'
-    }
-  }
-})
-
 const workers = {
-  main: '/workers/main.js'
+	main: '/workers/main.js'
+}
+
+const statusEl = document.getElementById('status')
+const topicEl = document.getElementById('topic')
+const peersEl = document.getElementById('peers')
+const topicInputEl = document.getElementById('topic-input')
+const joinBtn = document.getElementById('join-btn')
+const questionInputEl = document.getElementById('question-input')
+const optionsInputEl = document.getElementById('options-input')
+const timeoutInputEl = document.getElementById('timeout-input')
+const createBtn = document.getElementById('create-btn')
+const pollStateEl = document.getElementById('poll-state')
+const pollBodyEl = document.getElementById('poll-body')
+const eventsEl = document.getElementById('events')
+
+let workerBuffer = ''
+
+function sendMessage(msg) {
+	return bridge.writeWorkerIPC(workers.main, JSON.stringify(msg) + '\n')
+}
+
+function logEvent(text) {
+	const li = document.createElement('li')
+	li.textContent = text
+	eventsEl.prepend(li)
+}
+
+function renderPoll(poll) {
+	pollBodyEl.innerHTML = ''
+
+	if (!poll) {
+		pollStateEl.textContent = 'No active poll'
+		return
+	}
+
+	const ended = poll.status !== 'open'
+	pollStateEl.textContent = ended ? 'Closed' : 'Open until ' + new Date(poll.endsAt).toLocaleTimeString()
+
+	const title = document.createElement('div')
+	title.innerHTML = '<strong>' + poll.question + '</strong>'
+	pollBodyEl.appendChild(title)
+
+	const meta = document.createElement('div')
+	meta.className = 'muted'
+	meta.textContent = 'Votes: ' + Object.values(poll.votes || {}).length + ' | Created by: ' + poll.createdBy
+	pollBodyEl.appendChild(meta)
+
+	const list = document.createElement('div')
+	list.className = 'options'
+
+	for (let index = 0; index < poll.options.length; index++) {
+		const option = poll.options[index]
+		const button = document.createElement('button')
+		button.textContent = option.label + ' — ' + (poll.counts?.[index] ?? 0) + ' votes'
+		button.disabled = ended
+		button.onclick = () => sendMessage({ type: 'CAST_VOTE', optionIndex: index })
+		list.appendChild(button)
+	}
+
+	pollBodyEl.appendChild(list)
+
+	if (ended) {
+		const closed = document.createElement('div')
+		closed.className = 'muted'
+		closed.textContent = 'Closed at ' + new Date(poll.closedAt).toLocaleTimeString()
+		pollBodyEl.appendChild(closed)
+	}
 }
 
 bridge.startWorker(workers.main)
 
 const offWorkerStdout = bridge.onWorkerStdout(workers.main, (data) => {
-  console.log('worker stdout', '[', workers.main, ']:', decoder.decode(data))
+	console.log('worker stdout', decoder.decode(data))
 })
 
 const offWorkerStderr = bridge.onWorkerStderr(workers.main, (data) => {
-  console.error('worker stderr', '[', workers.main, ']:', decoder.decode(data))
+	console.error('worker stderr', decoder.decode(data))
 })
 
 const offWorkerIpc = bridge.onWorkerIPC(workers.main, (data) => {
-  console.log('worker ipc', '[', workers.main, ']:', decoder.decode(data))
+	workerBuffer += decoder.decode(data)
+	const lines = workerBuffer.split('\n')
+	workerBuffer = lines.pop()
 
-  bridge.writeWorkerIPC(workers.main, 'Hello from renderer')
+	for (const line of lines) {
+		if (!line.trim()) continue
+
+		let message
+		try {
+			message = JSON.parse(line)
+		} catch (error) {
+			statusEl.textContent = 'Bad worker message: ' + error.message
+			continue
+		}
+
+		if (message.type === 'READY') {
+			statusEl.textContent = 'Ready'
+			topicEl.textContent = message.topic
+			continue
+		}
+
+		if (message.type === 'STATE') {
+			statusEl.textContent = 'Synced'
+			topicEl.textContent = message.topic
+			peersEl.textContent = String(message.peers)
+			renderPoll(message.poll)
+			continue
+		}
+
+		if (message.type === 'PEERS') {
+			peersEl.textContent = String(message.count)
+			topicEl.textContent = message.topic
+			continue
+		}
+
+		if (message.type === 'PONG') {
+			logEvent('pong: ' + message.topic)
+			continue
+		}
+
+		if (message.type === 'error') {
+			statusEl.textContent = 'Error: ' + message.message
+			logEvent('error: ' + message.message)
+			continue
+		}
+
+		if (message.type === 'PEER_CONNECTED') {
+			logEvent('peer connected: ' + message.peer)
+			continue
+		}
+
+		if (message.type === 'PEER_DISCONNECTED') {
+			logEvent('peer disconnected: ' + message.peer)
+			continue
+		}
+	}
 })
 
-const offWorkerExit = bridge.onWorkerExit(workers.main, (code) => {
-  console.log('Worker exited with code', code)
-  offWorkerStdout()
-  offWorkerStderr()
-  offWorkerIpc()
-  offWorkerExit()
+const onWorkerExit = bridge.onWorkerExitSafe || bridge.onWorkerExit
+
+const offWorkerExit = onWorkerExit(workers.main, (code) => {
+	statusEl.textContent = 'Worker exited: ' + code
+	offWorkerStdout()
+	offWorkerStderr()
+	offWorkerIpc()
+	offWorkerExit()
+})
+
+joinBtn.addEventListener('click', async () => {
+	const raw = topicInputEl.value.trim()
+	const match = raw.match(/[0-9a-fA-F]{64}/)
+	const key = match ? match[0].toLowerCase() : ''
+	if (!key) {
+		statusEl.textContent = 'Paste a 64-char hex topic'
+		return
+	}
+
+	statusEl.textContent = 'Joining...'
+	await sendMessage({ type: 'JOIN', key })
+	topicEl.textContent = key
+})
+
+createBtn.addEventListener('click', async () => {
+	const question = questionInputEl.value.trim()
+	const options = optionsInputEl.value
+		.split(',')
+		.map((item) => item.trim())
+		.filter(Boolean)
+	const timeoutSeconds = Number(timeoutInputEl.value)
+
+	if (!question || options.length < 2 || !Number.isFinite(timeoutSeconds)) {
+		statusEl.textContent = 'Fill question, at least 2 options and timeout'
+		return
+	}
+
+	statusEl.textContent = 'Creating poll...'
+	await sendMessage({
+		type: 'CREATE_POLL',
+		question,
+		options,
+		timeoutMs: timeoutSeconds * 1000
+	})
 })

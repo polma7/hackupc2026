@@ -19,7 +19,6 @@
     "make:linux": "electron-forge package && ./scripts/build-app-image.sh"
   },
   "dependencies": {
-    "corestore": "^7.9.1",
     "hyperswarm": "^4.17.0",
     "paparam": "^1.10.0",
     "pear-runtime": "^1.0.1",
