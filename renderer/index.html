@@ -385,6 +385,99 @@
 
       .stat-value.accent { color: var(--accent); }
 
+      /* ── Create poll form ────────────────────────────────────────────── */
+      .poll-options-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .poll-option-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .poll-option-bullet {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--accent);
+        background: rgba(182,255,60,0.08);
+        border: 1px solid rgba(182,255,60,0.22);
+        border-radius: 6px;
+        padding: 6px 8px;
+        min-width: 32px;
+        text-align: center;
+        letter-spacing: 0.04em;
+        flex-shrink: 0;
+      }
+
+      .poll-option-input {
+        flex: 1;
+        min-width: 0;
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+
+      .poll-option-remove {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        font-size: 18px;
+        line-height: 1;
+        color: var(--text-mute);
+      }
+
+      .poll-option-remove:hover:not(:disabled) {
+        color: var(--danger);
+        border-color: var(--danger);
+      }
+
+      #add-option-btn {
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        background: transparent;
+        border-style: dashed;
+        color: var(--text-dim);
+      }
+
+      #add-option-btn:hover:not(:disabled) {
+        color: var(--accent);
+        border-color: var(--accent);
+        background: rgba(182,255,60,0.04);
+      }
+
+      .timeout-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .timeout-row input {
+        max-width: 160px;
+        flex: 0 0 auto;
+      }
+
+      .timeout-suffix {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text-mute);
+        letter-spacing: 0.04em;
+      }
+
+      .form-error {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--danger);
+        margin-top: 10px;
+        min-height: 16px;
+      }
+
       /* ── Options (vote buttons) ──────────────────────────────────────── */
       .options {
         margin-top: 14px;
@@ -755,6 +848,34 @@
           <input id="topic-input" type="text" placeholder="Paste 64 hex hash here" autocomplete="off" />
           <button id="join-btn" class="primary">Join →</button>
         </div>
+      </div>
+
+      <div id="create-poll-card" class="card hidden">
+        <h2>New poll</h2>
+        <div class="muted">Set the question, options, and how long voting stays open.</div>
+
+        <div class="label">Question</div>
+        <div class="row">
+          <input id="poll-question" type="text" placeholder="What do you want to ask?" maxlength="200" autocomplete="off" />
+        </div>
+
+        <div class="label">Options <span style="color:var(--text-mute);text-transform:none;letter-spacing:0;font-weight:400">· at least two</span></div>
+        <div id="poll-options-list" class="poll-options-list"></div>
+        <div class="row" style="margin-top:8px">
+          <button id="add-option-btn" type="button">+ Add option</button>
+        </div>
+
+        <div class="label">Duration</div>
+        <div class="timeout-row">
+          <input id="poll-timeout" type="number" min="5" max="86400" value="60" inputmode="numeric" />
+          <span class="timeout-suffix">seconds</span>
+        </div>
+
+        <div class="row" style="margin-top:18px">
+          <button id="create-poll-btn" class="primary">Create poll →</button>
+        </div>
+
+        <div id="create-poll-error" class="form-error"></div>
       </div>
 
       <div id="poll-card" class="card hidden">

@@ -36,16 +36,17 @@ const updates = cmd.flags.updates
 
 const isCreator = cmd.flags.create === true
 const role = isCreator ? 'creator' : 'voter'
-const pollConfig = isCreator
+const hasFullPollFlags =
+  typeof cmd.flags.question === 'string' &&
+  typeof cmd.flags.options === 'string' &&
+  cmd.flags.timeout !== undefined
+const pollConfig = isCreator && hasFullPollFlags
   ? {
-      question: typeof cmd.flags.question === 'string' ? cmd.flags.question : 'Untitled poll',
-      options:
-        typeof cmd.flags.options === 'string'
-          ? cmd.flags.options
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : ['Yes', 'No'],
+      question: cmd.flags.question,
+      options: cmd.flags.options
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
       timeoutMs: Math.max(5, Number(cmd.flags.timeout) || 60) * 1000
     }
   : null

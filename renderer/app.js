@@ -23,6 +23,15 @@ const pollStateEl     = document.getElementById('poll-state')
 const pollBodyEl      = document.getElementById('poll-body')
 const eventsEl        = document.getElementById('events')
 
+// ── Create-poll form refs ─────────────────────────────────────────────────────
+const createPollCardEl  = document.getElementById('create-poll-card')
+const pollQuestionEl    = document.getElementById('poll-question')
+const pollOptionsListEl = document.getElementById('poll-options-list')
+const addOptionBtn      = document.getElementById('add-option-btn')
+const pollTimeoutEl     = document.getElementById('poll-timeout')
+const createPollBtn     = document.getElementById('create-poll-btn')
+const createPollErrorEl = document.getElementById('create-poll-error')
+
 // ── Certificate overlay DOM refs ──────────────────────────────────────────────
 const certOverlayEl   = document.getElementById('cert-overlay')
 const certFileArea    = document.getElementById('cert-file-area')
@@ -105,14 +114,122 @@ certVerifyBtn.addEventListener('click', async () => {
 roleBadgeEl.textContent = role.toUpperCase()
 roleBadgeEl.classList.add(role)
 
+// ── Create-poll form (creator only) ───────────────────────────────────────────
+const MAX_OPTIONS = 8
+const MIN_OPTIONS = 2
+
 if (role === 'creator') {
   topicHeadingEl.textContent = 'Topic to share'
   topicHelpEl.textContent = 'Share this hash with voters by any channel (chat, QR, paper).'
   joinCardEl.classList.add('hidden')
+  setupCreatePollForm()
 } else {
   topicCardEl.classList.add('hidden')
   pollCardEl.classList.add('hidden')
   joinCardEl.classList.remove('hidden')
+}
+
+function renumberOptionRows() {
+  const rows = pollOptionsListEl.querySelectorAll('.poll-option-row')
+  rows.forEach((row, i) => {
+    const bullet = row.querySelector('.poll-option-bullet')
+    if (bullet) bullet.textContent = String(i + 1).padStart(2, '0')
+    const removeBtn = row.querySelector('.poll-option-remove')
+    if (removeBtn) removeBtn.disabled = rows.length <= MIN_OPTIONS
+  })
+  if (addOptionBtn) addOptionBtn.disabled = rows.length >= MAX_OPTIONS
+}
+
+function addOptionRow(value = '') {
+  const row = document.createElement('div')
+  row.className = 'poll-option-row'
+
+  const bullet = document.createElement('span')
+  bullet.className = 'poll-option-bullet'
+
+  const input = document.createElement('input')
+  input.className = 'poll-option-input'
+  input.type = 'text'
+  input.placeholder = 'Option text'
+  input.maxLength = 80
+  input.value = value
+  input.autocomplete = 'off'
+
+  const remove = document.createElement('button')
+  remove.type = 'button'
+  remove.className = 'poll-option-remove'
+  remove.textContent = '×'
+  remove.title = 'Remove option'
+  remove.addEventListener('click', () => {
+    if (pollOptionsListEl.children.length <= MIN_OPTIONS) return
+    row.remove()
+    renumberOptionRows()
+  })
+
+  row.appendChild(bullet)
+  row.appendChild(input)
+  row.appendChild(remove)
+  pollOptionsListEl.appendChild(row)
+  renumberOptionRows()
+}
+
+function getCurrentOptionValues() {
+  return Array.from(pollOptionsListEl.querySelectorAll('.poll-option-input'))
+    .map((i) => i.value.trim())
+}
+
+function setupCreatePollForm() {
+  if (!createPollCardEl) return
+  pollOptionsListEl.replaceChildren()
+  for (let i = 0; i < MIN_OPTIONS; i++) addOptionRow()
+
+  addOptionBtn.addEventListener('click', () => {
+    if (pollOptionsListEl.children.length >= MAX_OPTIONS) return
+    addOptionRow()
+  })
+
+  createPollBtn.addEventListener('click', async () => {
+    const question = pollQuestionEl.value.trim()
+    const options = getCurrentOptionValues().filter(Boolean)
+    const seconds = Number(pollTimeoutEl.value)
+
+    createPollErrorEl.textContent = ''
+
+    if (!question) {
+      createPollErrorEl.textContent = 'Please enter a question.'
+      return
+    }
+    if (options.length < MIN_OPTIONS) {
+      createPollErrorEl.textContent = 'At least two non-empty options are required.'
+      return
+    }
+    if (!Number.isFinite(seconds) || seconds < 5) {
+      createPollErrorEl.textContent = 'Duration must be at least 5 seconds.'
+      return
+    }
+
+    createPollBtn.disabled = true
+    createPollBtn.textContent = 'Creating…'
+    statusEl.textContent = 'Creating poll…'
+
+    try {
+      await sendMessage({
+        type: 'CREATE_POLL',
+        question,
+        options,
+        timeoutMs: Math.floor(seconds * 1000)
+      })
+      logEvent('Poll created: ' + question)
+    } catch (err) {
+      createPollErrorEl.textContent = 'Failed to create poll: ' + (err.message || err)
+      createPollBtn.disabled = false
+      createPollBtn.textContent = 'Create poll →'
+    }
+  })
+
+  pollQuestionEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') createPollBtn.click()
+  })
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -166,9 +283,19 @@ function renderPoll(poll) {
   currentPoll = poll
   pollBodyEl.replaceChildren()
 
+  if (role === 'creator') {
+    if (poll) {
+      createPollCardEl.classList.add('hidden')
+      pollCardEl.classList.remove('hidden')
+    } else {
+      createPollCardEl.classList.remove('hidden')
+      pollCardEl.classList.add('hidden')
+    }
+  }
+
   if (!poll) {
     pollStateEl.textContent =
-      role === 'creator' ? 'Initializing poll...' : 'Waiting for an active poll...'
+      role === 'creator' ? 'No active poll yet.' : 'Waiting for an active poll...'
     return
   }
 
@@ -229,14 +356,6 @@ function renderPoll(poll) {
   }
 
   pollBodyEl.appendChild(list)
-
-  if (role === 'creator' && !ended) {
-    const note = document.createElement('div')
-    note.className = 'muted'
-    note.style.marginTop = '8px'
-    note.textContent = 'Creator node does not vote.'
-    pollBodyEl.appendChild(note)
-  }
 
   if (alreadyVoted && !ended) {
     const note = document.createElement('div')
@@ -324,6 +443,16 @@ const offWorkerIpc = bridge.onWorkerIPC(workers.main, (data) => {
     if (message.type === 'error') {
       statusEl.textContent = 'Error: ' + message.message
       logEvent('error: ' + message.message)
+      if (
+        role === 'creator' &&
+        createPollBtn &&
+        createPollBtn.disabled &&
+        /Creating/i.test(createPollBtn.textContent || '')
+      ) {
+        createPollBtn.disabled = false
+        createPollBtn.textContent = 'Create poll →'
+        createPollErrorEl.textContent = message.message || 'Failed to create poll'
+      }
       continue
     }
   }
