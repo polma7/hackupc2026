@@ -1,50 +1,279 @@
 <!doctype html>
-<html>
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <title>P2P Voting</title>
+    <title>P2P Voting · Pear</title>
+    <meta name="description" content="Decentralized peer-to-peer voting on the Pear network." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-      body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      :root {
+        --bg:        #0a0a0a;
+        --bg-soft:   #111111;
+        --bg-card:   #0f0f0f;
+        --bg-elev:   #161616;
+        --line:      #1f1f1f;
+        --line-2:    #2a2a2a;
+        --text:      #e8e8e8;
+        --text-dim:  #8a8a8a;
+        --text-mute: #5a5a5a;
+        --accent:    #b6ff3c;
+        --accent-2:  #79e34d;
+        --accent-d:  #2a3a10;
+        --danger:    #ff5d5d;
+        --warn:      #ffb13c;
+        --mono:      'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        --sans:      'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
         margin: 0;
-        background: #111;
-        color: #f2f2f2;
+        padding: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
 
-      .container {
-        max-width: 900px;
-        margin: 32px auto;
-        padding: 0 16px 32px;
+      body {
+        background-image:
+          radial-gradient(ellipse at 20% -10%, rgba(182,255,60,0.08), transparent 50%),
+          radial-gradient(ellipse at 90% 10%, rgba(121,227,77,0.04), transparent 60%),
+          linear-gradient(180deg, var(--bg) 0%, #060606 100%);
+        background-attachment: fixed;
+        min-height: 100vh;
+        position: relative;
       }
 
-      h1, h2 { margin: 0 0 8px; }
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+        background-size: 32px 32px;
+        pointer-events: none;
+        z-index: 0;
+      }
 
-      .muted { color: #aaa; }
+      /* ── Top bar ──────────────────────────────────────────────────────── */
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        background: rgba(10,10,10,0.72);
+        border-bottom: 1px solid var(--line);
+      }
 
-      .badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 999px;
-        font-size: 12px;
+      .topbar-inner {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 14px 24px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: var(--mono);
         font-weight: 600;
-        margin-left: 8px;
+        letter-spacing: -0.01em;
+        font-size: 15px;
       }
 
-      .badge.creator { background: #5b3aff; color: #fff; }
-      .badge.voter   { background: #2e7d32; color: #fff; }
+      .brand-mark {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #0a0a0a;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 13px;
+        box-shadow: 0 0 18px rgba(182,255,60,0.45);
+      }
 
+      .brand small {
+        color: var(--text-mute);
+        font-weight: 400;
+        margin-left: 2px;
+      }
+
+      .topbar-spacer { flex: 1; }
+
+      .topbar-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text-dim);
+        padding: 6px 10px;
+        border: 1px solid var(--line-2);
+        border-radius: 999px;
+        background: var(--bg-soft);
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 10px var(--accent);
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%      { opacity: 0.55; transform: scale(0.85); }
+      }
+
+      /* ── Layout ──────────────────────────────────────────────────────── */
+      .container {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 40px 24px 80px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .hero {
+        margin-bottom: 36px;
+      }
+
+      .eyebrow {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .eyebrow::before {
+        content: '';
+        display: inline-block;
+        width: 18px;
+        height: 1px;
+        background: var(--accent);
+      }
+
+      h1.title {
+        font-family: var(--sans);
+        font-weight: 600;
+        font-size: clamp(32px, 5vw, 52px);
+        line-height: 1.05;
+        letter-spacing: -0.025em;
+        margin: 0 0 12px;
+      }
+
+      h1.title .accent {
+        color: var(--accent);
+        font-style: italic;
+        font-weight: 500;
+      }
+
+      .lede {
+        max-width: 640px;
+        color: var(--text-dim);
+        font-size: 16px;
+        line-height: 1.55;
+        margin: 0;
+      }
+
+      .role-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        padding: 5px 10px;
+        border-radius: 6px;
+        margin-left: 12px;
+        vertical-align: middle;
+        font-weight: 600;
+      }
+
+      .role-pill.creator {
+        background: rgba(182,255,60,0.12);
+        color: var(--accent);
+        border: 1px solid rgba(182,255,60,0.3);
+      }
+
+      .role-pill.voter {
+        background: rgba(121,227,77,0.08);
+        color: var(--accent-2);
+        border: 1px solid rgba(121,227,77,0.25);
+      }
+
+      /* ── Cards ──────────────────────────────────────────────────────── */
       .card {
-        background: #171717;
-        border: 1px solid #2a2a2a;
-        border-radius: 12px;
-        padding: 16px;
-        margin-top: 16px;
+        background: var(--bg-card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 22px;
+        margin-top: 18px;
+        position: relative;
+        transition: border-color 0.18s ease;
       }
 
+      .card:hover { border-color: var(--line-2); }
+
+      .card h2 {
+        margin: 0 0 4px;
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .card h2::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        background: var(--accent);
+        border-radius: 50%;
+        box-shadow: 0 0 8px var(--accent);
+      }
+
+      .muted {
+        color: var(--text-dim);
+        font-size: 14px;
+      }
+
+      .label {
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--text-mute);
+        margin: 14px 0 8px;
+      }
+
+      /* ── Forms ──────────────────────────────────────────────────────── */
       .row {
         display: flex;
-        gap: 8px;
+        gap: 10px;
         flex-wrap: wrap;
         margin-top: 12px;
       }
@@ -52,151 +281,444 @@
       input, textarea {
         flex: 1;
         min-width: 220px;
-        padding: 10px;
-        border-radius: 8px;
-        border: 1px solid #333;
-        background: #1b1b1b;
-        color: #f2f2f2;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--line-2);
+        background: var(--bg-soft);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 13px;
+        outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      input::placeholder { color: var(--text-mute); }
+
+      input:focus, textarea:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(182,255,60,0.12);
       }
 
       button {
-        padding: 10px 14px;
-        border-radius: 8px;
-        border: 1px solid #333;
-        background: #242424;
-        color: #f2f2f2;
+        padding: 12px 18px;
+        border-radius: 10px;
+        border: 1px solid var(--line-2);
+        background: var(--bg-elev);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 14px;
+        font-weight: 500;
         cursor: pointer;
+        transition: all 0.15s ease;
+        letter-spacing: -0.005em;
       }
 
-      button:hover  { background: #303030; }
-      button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-      pre {
-        padding: 12px;
-        border-radius: 8px;
-        background: #141414;
-        border: 1px solid #2a2a2a;
-        overflow: auto;
-        word-break: break-all;
-        white-space: pre-wrap;
+      button:hover:not(:disabled) {
+        background: #1d1d1d;
+        border-color: #383838;
+        transform: translateY(-1px);
       }
 
-      ul { padding-left: 20px; }
-
-      .options button {
-        display: block;
-        margin: 8px 0;
-        width: 100%;
-        text-align: left;
+      button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
       }
 
-      .hidden { display: none; }
-
-      .countdown {
-        font-variant-numeric: tabular-nums;
+      button.primary {
+        background: var(--accent);
+        color: #0a0a0a;
+        border-color: var(--accent);
         font-weight: 600;
       }
 
-      /* ── Certificate overlay ── */
+      button.primary:hover:not(:disabled) {
+        background: #c9ff5a;
+        border-color: #c9ff5a;
+        box-shadow: 0 6px 24px rgba(182,255,60,0.25);
+      }
+
+      /* ── Hash display ───────────────────────────────────────────────── */
+      pre {
+        padding: 14px 16px;
+        border-radius: 10px;
+        background: var(--bg-soft);
+        border: 1px solid var(--line);
+        overflow: auto;
+        word-break: break-all;
+        white-space: pre-wrap;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--accent-2);
+        margin: 8px 0 0;
+        line-height: 1.55;
+      }
+
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .stat {
+        background: var(--bg-soft);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px 16px;
+      }
+
+      .stat-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--text-mute);
+        margin-bottom: 6px;
+      }
+
+      .stat-value {
+        font-family: var(--mono);
+        font-size: 22px;
+        font-weight: 500;
+        color: var(--text);
+      }
+
+      .stat-value.accent { color: var(--accent); }
+
+      /* ── Options (vote buttons) ──────────────────────────────────────── */
+      .options {
+        margin-top: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .options button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 14px 16px;
+        font-family: var(--mono);
+        font-size: 13.5px;
+        background: var(--bg-soft);
+        border: 1px solid var(--line-2);
+        border-radius: 10px;
+        position: relative;
+      }
+
+      .options button:hover:not(:disabled) {
+        background: #181818;
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .countdown {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        color: var(--accent);
+        background: rgba(182,255,60,0.08);
+        padding: 2px 8px;
+        border-radius: 6px;
+        border: 1px solid rgba(182,255,60,0.2);
+      }
+
+      .hidden { display: none !important; }
+
+      /* ── Events ─────────────────────────────────────────────────────── */
+      ul {
+        padding: 0;
+        margin: 12px 0 0;
+        list-style: none;
+        font-family: var(--mono);
+        font-size: 12.5px;
+      }
+
+      ul li {
+        padding: 8px 12px;
+        border-left: 2px solid var(--line-2);
+        margin-bottom: 4px;
+        color: var(--text-dim);
+        background: rgba(255,255,255,0.01);
+        border-radius: 0 6px 6px 0;
+      }
+
+      ul li:first-child {
+        border-left-color: var(--accent);
+        color: var(--text);
+      }
+
+      /* ── Identity badge ─────────────────────────────────────────────── */
+      #identity-badge {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        background: linear-gradient(135deg, rgba(182,255,60,0.06), rgba(121,227,77,0.02));
+        border: 1px solid rgba(182,255,60,0.22);
+      }
+
+      #identity-badge:hover { border-color: rgba(182,255,60,0.35); }
+
+      .identity-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: var(--accent);
+        color: #0a0a0a;
+        display: grid;
+        place-items: center;
+        font-size: 22px;
+        font-weight: 700;
+        flex-shrink: 0;
+        box-shadow: 0 0 24px rgba(182,255,60,0.35);
+      }
+
+      .identity-info { flex: 1; min-width: 0; }
+      .identity-name {
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.005em;
+      }
+      .identity-meta {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--accent-2);
+        margin-top: 4px;
+        letter-spacing: 0.01em;
+      }
+
+      /* ── Certificate overlay ────────────────────────────────────────── */
       #cert-overlay {
         position: fixed;
         inset: 0;
-        background: #0d0d0d;
+        background: var(--bg);
+        background-image:
+          radial-gradient(ellipse at 50% 0%, rgba(182,255,60,0.08), transparent 55%),
+          linear-gradient(180deg, #060606, #000);
         display: flex;
         align-items: center;
         justify-content: center;
         z-index: 1000;
+        padding: 24px;
+      }
+
+      #cert-overlay::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+        background-size: 32px 32px;
+        pointer-events: none;
       }
 
       .cert-box {
-        background: #171717;
-        border: 1px solid #2a2a2a;
-        border-radius: 16px;
-        padding: 32px;
-        max-width: 460px;
-        width: 90%;
+        position: relative;
+        background: var(--bg-card);
+        border: 1px solid var(--line-2);
+        border-radius: 18px;
+        padding: 36px 32px;
+        max-width: 480px;
+        width: 100%;
+        box-shadow:
+          0 1px 0 rgba(255,255,255,0.04) inset,
+          0 30px 80px rgba(0,0,0,0.6),
+          0 0 0 1px rgba(182,255,60,0.06);
       }
 
-      .cert-box h1 { font-size: 22px; margin-bottom: 4px; }
+      .cert-box .brand {
+        margin-bottom: 22px;
+        font-size: 14px;
+      }
+
+      .cert-box h1 {
+        font-family: var(--sans);
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        margin: 0 0 6px;
+      }
+
+      .cert-box h1 .accent { color: var(--accent); font-style: italic; font-weight: 500; }
+
+      .cert-section-label {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--text-mute);
+        margin: 22px 0 6px;
+      }
 
       .cert-file-area {
         border: 1px dashed #333;
-        border-radius: 10px;
-        padding: 20px;
+        border-radius: 12px;
+        padding: 24px;
         text-align: center;
-        margin-top: 16px;
+        margin-top: 10px;
         cursor: pointer;
-        transition: border-color 0.15s;
+        transition: all 0.18s ease;
+        background: var(--bg-soft);
       }
 
-      .cert-file-area:hover { border-color: #555; }
-      .cert-file-area.has-file { border-color: #2e7d32; }
+      .cert-file-area:hover {
+        border-color: var(--accent);
+        background: rgba(182,255,60,0.03);
+      }
 
-      .cert-file-icon { font-size: 28px; margin-bottom: 8px; }
-      .cert-file-name { font-size: 13px; font-weight: 600; word-break: break-all; }
+      .cert-file-area.has-file {
+        border-color: var(--accent);
+        border-style: solid;
+        background: rgba(182,255,60,0.05);
+      }
+
+      .cert-file-icon {
+        font-size: 24px;
+        margin-bottom: 8px;
+        opacity: 0.85;
+      }
+
+      .cert-file-name {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        font-weight: 500;
+        word-break: break-all;
+        color: var(--text);
+      }
+
+      .cert-file-area:not(.has-file) .cert-file-name { color: var(--text-mute); }
 
       .cert-status {
-        margin-top: 12px;
-        font-size: 14px;
-        min-height: 20px;
+        margin-top: 14px;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        min-height: 18px;
         text-align: center;
+        letter-spacing: 0.01em;
       }
 
-      /* ── Identity badge ── */
-      #identity-badge {
-        border-color: #1b4d1e;
-        background: #0f1f10;
-        display: flex;
-        align-items: center;
-        gap: 14px;
+      .cert-footnote {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--text-mute);
+        margin-top: 24px;
+        text-align: center;
+        letter-spacing: 0.04em;
+        line-height: 1.6;
       }
 
-      .identity-icon { font-size: 28px; flex-shrink: 0; }
+      .cert-footnote code {
+        background: var(--bg-soft);
+        padding: 1px 5px;
+        border-radius: 4px;
+        border: 1px solid var(--line);
+        color: var(--accent-2);
+      }
 
-      .identity-info { flex: 1; min-width: 0; }
-      .identity-name { font-weight: 600; font-size: 15px; }
-      .identity-meta { font-size: 12px; color: #7cb87f; margin-top: 2px; }
+      /* ── Misc ────────────────────────────────────────────────────────── */
+      code {
+        font-family: var(--mono);
+        font-size: 0.92em;
+        background: var(--bg-soft);
+        padding: 1px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--line);
+        color: var(--accent-2);
+      }
+
+      strong { color: var(--text); }
+
+      ::selection {
+        background: rgba(182,255,60,0.3);
+        color: #fff;
+      }
+
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 6px; }
+      ::-webkit-scrollbar-thumb:hover { background: #383838; }
+
+      @media (max-width: 640px) {
+        .topbar-inner { padding: 12px 16px; }
+        .container { padding: 28px 16px 60px; }
+        .card { padding: 18px; }
+      }
     </style>
   </head>
   <body>
 
-    <!-- Certificate verification screen (shown on startup) -->
+    <!-- ───────── Certificate verification screen ───────── -->
     <div id="cert-overlay">
       <div class="cert-box">
-        <h1>P2P Voting</h1>
-        <p class="muted" style="margin-bottom:24px;">Verificación de identidad requerida para continuar.</p>
+        <div class="brand">
+          <div class="brand-mark">P</div>
+          <span>P2P Voting</span>
+        </div>
 
-        <h2 style="font-size:15px; color:#aaa; font-weight:400; margin-bottom:4px;">CERTIFICADO DIGITAL</h2>
-        <p class="muted" style="font-size:13px; margin-bottom:0;">Selecciona tu archivo <code>.p12</code> o <code>.pfx</code> e introduce la contraseña.</p>
+        <h1>Verify your <span class="accent">identity</span></h1>
+        <p class="muted" style="margin: 6px 0 0;">
+          We need to validate your digital certificate before you can participate.
+        </p>
+
+        <div class="cert-section-label">Digital certificate</div>
+        <p class="muted" style="font-size: 13px; margin: 0;">
+          Select your <code>.p12</code> or <code>.pfx</code> file and enter the password.
+        </p>
 
         <div id="cert-file-area" class="cert-file-area">
           <div class="cert-file-icon">📄</div>
-          <div id="cert-file-name" class="cert-file-name muted">Haz clic para seleccionar archivo</div>
+          <div id="cert-file-name" class="cert-file-name">Click to select file</div>
         </div>
         <input type="file" id="cert-file-input" accept=".p12,.pfx" style="display:none;">
 
-        <div class="row" style="margin-top:12px;">
-          <input type="password" id="cert-password" placeholder="Contraseña del certificado" autocomplete="current-password" />
+        <div class="row" style="margin-top: 14px;">
+          <input type="password" id="cert-password" placeholder="Certificate password" autocomplete="current-password" />
         </div>
 
-        <div class="row" style="margin-top:12px;">
-          <button id="cert-verify-btn" disabled style="flex:1; background:#1a3a1c; border-color:#2e7d32; color:#fff;">
-            Verificar identidad
+        <div class="row" style="margin-top: 12px;">
+          <button id="cert-verify-btn" class="primary" disabled style="flex:1;">
+            Verify identity →
           </button>
         </div>
 
         <div id="cert-status" class="cert-status muted"></div>
 
-        <p class="muted" style="font-size:11px; margin-top:20px; text-align:center;">
-          En producción se usarían certificados oficiales emitidos por la FNMT o el DNIe.
-        </p>
+        <div class="cert-footnote">
+          In production, official certificates issued by <code>FNMT</code> or <code>DNIe</code> would be used.
+        </div>
       </div>
     </div>
 
-    <!-- Main app -->
+    <!-- ───────── Top bar ───────── -->
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-mark">P</div>
+          <span>P2P Voting</span>
+        </div>
+        <div class="topbar-spacer"></div>
+        <div class="topbar-status">
+          <span class="dot"></span>
+          <span id="status">Starting…</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ───────── Main app ───────── -->
     <div class="container">
-      <h1>P2P Voting<span id="role-badge" class="badge"></span></h1>
-      <div class="muted" id="status">Starting...</div>
+
+      <div class="hero">
+        <div class="eyebrow">Decentralized · Peer-to-peer · Trustless</div>
+        <h1 class="title">
+          Vote without <span class="accent">servers</span>.<br/>
+          Unstoppable. Verifiable.<span id="role-badge" class="role-pill"></span>
+        </h1>
+        <p class="lede">
+          A distributed voting system built on the Pear network. No backend, no custodians.
+          Every peer holds a copy of the state, and results survive even if the creator goes offline.
+        </p>
+      </div>
 
       <!-- Identity badge (shown after cert verification) -->
       <div id="identity-badge" class="card hidden">
@@ -210,26 +732,34 @@
       <div id="topic-card" class="card">
         <h2 id="topic-heading">Topic to share</h2>
         <div class="muted" id="topic-help">Share this hash with voters.</div>
+
+        <div class="label">Topic hash</div>
         <pre id="topic">...</pre>
+
         <div class="row">
-          <button id="copy-topic-btn">Copy hash</button>
+          <button id="copy-topic-btn" class="primary">Copy hash</button>
         </div>
-        <div class="muted" style="margin-top:12px">Peers connected</div>
-        <pre id="peers">0</pre>
+
+        <div class="stat-grid">
+          <div class="stat">
+            <div class="stat-label">Peers connected</div>
+            <div class="stat-value accent" id="peers">0</div>
+          </div>
+        </div>
       </div>
 
       <div id="join-card" class="card hidden">
         <h2>Join a poll</h2>
-        <div class="muted">Paste the 64-char hex hash you received from the creator.</div>
+        <div class="muted">Paste the 64-character hex hash you received from the creator.</div>
         <div class="row">
           <input id="topic-input" type="text" placeholder="Paste 64 hex hash here" autocomplete="off" />
-          <button id="join-btn">Join</button>
+          <button id="join-btn" class="primary">Join →</button>
         </div>
       </div>
 
       <div id="poll-card" class="card hidden">
         <h2>Active poll</h2>
-        <div id="poll-state" class="muted">Connecting...</div>
+        <div id="poll-state" class="muted">Connecting…</div>
         <div id="poll-body"></div>
       </div>
 

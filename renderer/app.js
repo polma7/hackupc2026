@@ -66,7 +66,7 @@ certPasswordEl.addEventListener('keydown', (e) => {
 
 certVerifyBtn.addEventListener('click', async () => {
   certVerifyBtn.disabled = true
-  certStatusEl.textContent = 'Verificando certificado...'
+  certStatusEl.textContent = 'Verifying certificate...'
   certStatusEl.style.color = '#aaa'
 
   try {
@@ -75,27 +75,27 @@ certVerifyBtn.addEventListener('click', async () => {
     if (result.ok) {
       certIdentity = result
 
-      identityNameEl.textContent = result.name || 'Nombre no disponible'
+      identityNameEl.textContent = result.name || 'Name unavailable'
       identityMetaEl.textContent = [
         result.nif ? 'NIF: ' + result.nif : null,
-        result.issuer ? 'Emitido por: ' + result.issuer : null,
+        result.issuer ? 'Issued by: ' + result.issuer : null,
       ].filter(Boolean).join(' · ')
       identityBadgeEl.classList.remove('hidden')
 
-      certStatusEl.textContent = '✓ Identidad verificada correctamente'
+      certStatusEl.textContent = '✓ Identity verified successfully'
       certStatusEl.style.color = '#4caf50'
 
       setTimeout(() => {
         certOverlayEl.style.display = 'none'
-        logEvent('Identidad verificada: ' + (result.name || result.nif || 'desconocido'))
+        logEvent('Identity verified: ' + (result.name || result.nif || 'unknown'))
       }, 1000)
     } else {
-      certStatusEl.textContent = '✗ ' + (result.error || 'Verificación fallida')
+      certStatusEl.textContent = '✗ ' + (result.error || 'Verification failed')
       certStatusEl.style.color = '#f44336'
       certVerifyBtn.disabled = false
     }
   } catch (e) {
-    certStatusEl.textContent = '✗ Error inesperado: ' + e.message
+    certStatusEl.textContent = '✗ Unexpected error: ' + e.message
     certStatusEl.style.color = '#f44336'
     certVerifyBtn.disabled = false
   }
@@ -220,7 +220,7 @@ function renderPoll(poll) {
     }
     button.onclick = async () => {
       if (!canVote) return
-      statusEl.textContent = 'Firmando voto con certificado digital...'
+      statusEl.textContent = 'Signing vote with digital certificate...'
       await new Promise(r => setTimeout(r, 500))
       statusEl.textContent = 'Voting...'
       await sendMessage({ type: 'CAST_VOTE', optionIndex: index })
