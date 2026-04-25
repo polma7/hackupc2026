@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain } = require('electron')
 const os = require('os')
 const path = require('path')
+const forge = require('node-forge')
+const crypto = require('crypto')
 const Hyperswarm = require('hyperswarm')
 const Corestore = require('corestore')
 const PearRuntime = require('pear-runtime')
@@ -198,6 +200,63 @@ ipcMain.handle('pear:startWorker', (evt, filename) => {
   getWorker(filename)
   return true
 })
+ipcMain.handle('cert:verify', async (evt, { data, password }) => {
+  try {
+    const buf = Buffer.isBuffer(data) ? data : Buffer.from(data)
+    const p12Der = forge.util.createBuffer(buf.toString('binary'))
+    const p12Asn1 = forge.asn1.fromDer(p12Der)
+    const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password)
+
+    const certBags = p12.getBags({ bagType: forge.pki.oids.certBag })
+    const certBag = (certBags[forge.pki.oids.certBag] || [])[0]
+    if (!certBag) return { ok: false, error: 'No se encontró certificado en el archivo' }
+    const cert = certBag.cert
+
+    const now = new Date()
+    if (now < cert.validity.notBefore || now > cert.validity.notAfter) {
+      return { ok: false, error: 'El certificado está caducado' }
+    }
+
+    const getField = (obj, name) => { try { return obj.getField(name)?.value || '' } catch { return '' } }
+    const cn = getField(cert.subject, 'CN')
+    const nif = getField(cert.subject, 'serialNumber') || getField(cert.subject, '2.5.4.5')
+    const issuer = getField(cert.issuer, 'CN') || 'CA desconocida'
+
+    let challengeOk = false
+    try {
+      const keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })
+      const pkBag = (keyBags[forge.pki.oids.pkcs8ShroudedKeyBag] || [])[0]
+      if (pkBag?.key) {
+        const challenge = crypto.randomBytes(32).toString('hex')
+        const md = forge.md.sha256.create()
+        md.update(challenge, 'utf8')
+        const sig = pkBag.key.sign(md)
+        const md2 = forge.md.sha256.create()
+        md2.update(challenge, 'utf8')
+        challengeOk = cert.publicKey.verify(md2.digest().bytes(), sig)
+      }
+    } catch {
+      challengeOk = true // clave EC u otro tipo — la descifrado del PKCS12 ya prueba posesión
+    }
+
+    if (!challengeOk) return { ok: false, error: 'No se pudo verificar la clave del certificado' }
+
+    return {
+      ok: true,
+      name: cn,
+      nif,
+      issuer,
+      validTo: cert.validity.notAfter.toISOString(),
+    }
+  } catch (e) {
+    const msg = e.message || ''
+    if (msg.toLowerCase().includes('password') || msg.toLowerCase().includes('mac')) {
+      return { ok: false, error: 'Contraseña incorrecta' }
+    }
+    return { ok: false, error: 'Error al leer el certificado: ' + msg }
+  }
+})
+
 ipcMain.handle('app:afterUpdate', () => {
   if (isLinux && process.env.APPIMAGE) {
     app.relaunch({

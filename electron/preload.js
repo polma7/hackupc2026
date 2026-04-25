@@ -41,5 +41,8 @@ contextBridge.exposeInMainWorld('bridge', {
   },
   writeWorkerIPC: (specifier, data) => {
     return ipcRenderer.invoke('pear:worker:writeIPC:' + specifier, data)
+  },
+  verifyCert: (arrayBuffer, password) => {
+    return ipcRenderer.invoke('cert:verify', { data: Buffer.from(arrayBuffer), password })
   }
 })

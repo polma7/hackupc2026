@@ -18,14 +18,9 @@
         padding: 0 16px 32px;
       }
 
-      h1,
-      h2 {
-        margin: 0 0 8px;
-      }
+      h1, h2 { margin: 0 0 8px; }
 
-      .muted {
-        color: #aaa;
-      }
+      .muted { color: #aaa; }
 
       .badge {
         display: inline-block;
@@ -36,15 +31,8 @@
         margin-left: 8px;
       }
 
-      .badge.creator {
-        background: #5b3aff;
-        color: #fff;
-      }
-
-      .badge.voter {
-        background: #2e7d32;
-        color: #fff;
-      }
+      .badge.creator { background: #5b3aff; color: #fff; }
+      .badge.voter   { background: #2e7d32; color: #fff; }
 
       .card {
         background: #171717;
@@ -61,8 +49,7 @@
         margin-top: 12px;
       }
 
-      input,
-      textarea {
+      input, textarea {
         flex: 1;
         min-width: 220px;
         padding: 10px;
@@ -81,14 +68,8 @@
         cursor: pointer;
       }
 
-      button:hover {
-        background: #303030;
-      }
-
-      button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
+      button:hover  { background: #303030; }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
 
       pre {
         padding: 12px;
@@ -100,9 +81,7 @@
         white-space: pre-wrap;
       }
 
-      ul {
-        padding-left: 20px;
-      }
+      ul { padding-left: 20px; }
 
       .options button {
         display: block;
@@ -111,20 +90,122 @@
         text-align: left;
       }
 
-      .hidden {
-        display: none;
-      }
+      .hidden { display: none; }
 
       .countdown {
         font-variant-numeric: tabular-nums;
         font-weight: 600;
       }
+
+      /* ── Certificate overlay ── */
+      #cert-overlay {
+        position: fixed;
+        inset: 0;
+        background: #0d0d0d;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+
+      .cert-box {
+        background: #171717;
+        border: 1px solid #2a2a2a;
+        border-radius: 16px;
+        padding: 32px;
+        max-width: 460px;
+        width: 90%;
+      }
+
+      .cert-box h1 { font-size: 22px; margin-bottom: 4px; }
+
+      .cert-file-area {
+        border: 1px dashed #333;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        margin-top: 16px;
+        cursor: pointer;
+        transition: border-color 0.15s;
+      }
+
+      .cert-file-area:hover { border-color: #555; }
+      .cert-file-area.has-file { border-color: #2e7d32; }
+
+      .cert-file-icon { font-size: 28px; margin-bottom: 8px; }
+      .cert-file-name { font-size: 13px; font-weight: 600; word-break: break-all; }
+
+      .cert-status {
+        margin-top: 12px;
+        font-size: 14px;
+        min-height: 20px;
+        text-align: center;
+      }
+
+      /* ── Identity badge ── */
+      #identity-badge {
+        border-color: #1b4d1e;
+        background: #0f1f10;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .identity-icon { font-size: 28px; flex-shrink: 0; }
+
+      .identity-info { flex: 1; min-width: 0; }
+      .identity-name { font-weight: 600; font-size: 15px; }
+      .identity-meta { font-size: 12px; color: #7cb87f; margin-top: 2px; }
     </style>
   </head>
   <body>
+
+    <!-- Certificate verification screen (shown on startup) -->
+    <div id="cert-overlay">
+      <div class="cert-box">
+        <h1>P2P Voting</h1>
+        <p class="muted" style="margin-bottom:24px;">Verificación de identidad requerida para continuar.</p>
+
+        <h2 style="font-size:15px; color:#aaa; font-weight:400; margin-bottom:4px;">CERTIFICADO DIGITAL</h2>
+        <p class="muted" style="font-size:13px; margin-bottom:0;">Selecciona tu archivo <code>.p12</code> o <code>.pfx</code> e introduce la contraseña.</p>
+
+        <div id="cert-file-area" class="cert-file-area">
+          <div class="cert-file-icon">📄</div>
+          <div id="cert-file-name" class="cert-file-name muted">Haz clic para seleccionar archivo</div>
+        </div>
+        <input type="file" id="cert-file-input" accept=".p12,.pfx" style="display:none;">
+
+        <div class="row" style="margin-top:12px;">
+          <input type="password" id="cert-password" placeholder="Contraseña del certificado" autocomplete="current-password" />
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <button id="cert-verify-btn" disabled style="flex:1; background:#1a3a1c; border-color:#2e7d32; color:#fff;">
+            Verificar identidad
+          </button>
+        </div>
+
+        <div id="cert-status" class="cert-status muted"></div>
+
+        <p class="muted" style="font-size:11px; margin-top:20px; text-align:center;">
+          En producción se usarían certificados oficiales emitidos por la FNMT o el DNIe.
+        </p>
+      </div>
+    </div>
+
+    <!-- Main app -->
     <div class="container">
       <h1>P2P Voting<span id="role-badge" class="badge"></span></h1>
       <div class="muted" id="status">Starting...</div>
+
+      <!-- Identity badge (shown after cert verification) -->
+      <div id="identity-badge" class="card hidden">
+        <div class="identity-icon">✓</div>
+        <div class="identity-info">
+          <div class="identity-name" id="identity-name"></div>
+          <div class="identity-meta" id="identity-meta"></div>
+        </div>
+      </div>
 
       <div id="topic-card" class="card">
         <h2 id="topic-heading">Topic to share</h2>
@@ -157,6 +238,7 @@
         <ul id="events"></ul>
       </div>
     </div>
+
     <script type="module" src="app.js"></script>
   </body>
 </html>
