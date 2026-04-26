@@ -1,3 +1,4 @@
+
 # P2P E-Voting — HackUPC 2026
 
 A decentralized, serverless electronic voting system built on [Hyperswarm](https://github.com/holepunchto/hyperswarm) and [Electron](https://www.electronjs.org/). No server. No central database. Votes propagate peer-to-peer across a Kademlia-based DHT and are merged with a CRDT-style algorithm that guarantees eventual consistency even under network partitions.
@@ -26,44 +27,7 @@ A decentralized, serverless electronic voting system built on [Hyperswarm](https
 ---
 
 ## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Electron Process                             │
-│                                                                     │
-│  ┌──────────────────┐   IPC (contextBridge)   ┌─────────────────┐  │
-│  │  Renderer        │ ◄──────────────────────► │  Main Process   │  │
-│  │  (app.js)        │                          │  (main.js)      │  │
-│  │  - UI / DOM      │                          │  - Window mgmt  │  │
-│  │  - Cert verify   │                          │  - IPC bridge   │  │
-│  │  - QR display    │                          │  - Cert verify  │  │
-│  └──────────────────┘                          └────────┬────────┘  │
-│                                                         │ pear.run()│
-│                                                         ▼           │
-│                                                ┌─────────────────┐  │
-│                                                │  Bare Worker    │  │
-│                                                │  (workers/      │  │
-│                                                │   main.js)      │  │
-│                                                │  - Hyperswarm   │  │
-│                                                │  - CRDT merge   │  │
-│                                                │  - Poll state   │  │
-│                                                └────────┬────────┘  │
-└─────────────────────────────────────────────────────────┼───────────┘
-                                                          │ UDP / TCP
-                                                          ▼
-                                              ┌───────────────────────┐
-                                              │  Hyperswarm DHT       │
-                                              │  (global, public)     │
-                                              └──────────┬────────────┘
-                                                         │
-                                         ┌───────────────┴────────────┐
-                                         ▼                            ▼
-                               ┌──────────────────┐       ┌──────────────────┐
-                               │  Voter Node A    │       │  Voter Node B    │
-                               │  (same Bare      │       │  (same Bare      │
-                               │   worker arch)   │       │   worker arch)   │
-                               └──────────────────┘       └──────────────────┘
-```
+<img width="963" height="801" alt="Captura desde 2026-04-26 02-14-53" src="https://github.com/user-attachments/assets/d2716188-7104-4973-bf70-ede2734fc4f4" />
 
 The app runs in two roles:
 
