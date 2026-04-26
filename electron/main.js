@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron')
 const os = require('os')
 const path = require('path')
+const fs = require('fs')
 const forge = require('node-forge')
 const crypto = require('crypto')
 const Hyperswarm = require('hyperswarm')
@@ -35,12 +36,18 @@ const cmd = command(
 
 cmd.parse(app.isPackaged ? process.argv.slice(1) : process.argv.slice(2))
 
-const pearStore = cmd.flags.storage
+const isCreatorFlag = cmd.flags.create === true
+const defaultRoleStore = path.join(
+  os.tmpdir(),
+  'pear-' + (name || 'app') + '-' + (isCreatorFlag ? 'creator' : 'voter-' + process.pid)
+)
+const pearStore = cmd.flags.storage || defaultRoleStore
+fs.mkdirSync(pearStore, { recursive: true })
 const updates = cmd.flags.updates
 const HTTP_PORT = Number(process.env.MOBILE_HTTP_PORT) || 8787
 const MAIN_WORKER_SPEC = '/workers/main.js'
 
-const isCreator = cmd.flags.create === true
+const isCreator = isCreatorFlag
 const role = isCreator ? 'creator' : 'voter'
 const hasFullPollFlags =
   typeof cmd.flags.question === 'string' &&
@@ -191,6 +198,8 @@ async function createWindow() {
       contextIsolation: true
     }
   })
+
+  win.setMenuBarVisibility(false)
 
   const pear = getPear()
 
