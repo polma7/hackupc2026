@@ -42,7 +42,7 @@ The app runs in two roles:
 
 ### How it works
 
-Hyperswarm uses a [Kademlia DHT](https://en.wikipedia.org/wiki/Kademlia) running over UDP. Every node announces itself under a **topic** — a 32-byte buffer — and simultaneously queries for other nodes under the same topic.
+Hyperswarm uses a DHT running over UDP. Every node announces itself under a **topic** — a 32-byte buffer — and simultaneously queries for other nodes under the same topic.
 
 ```
 Creator starts
