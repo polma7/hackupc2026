@@ -1,7 +1,7 @@
 
 # P2P E-Voting — HackUPC 2026
 
-A decentralized, serverless electronic voting system built on [Hyperswarm](https://github.com/holepunchto/hyperswarm) and [Electron](https://www.electronjs.org/). No server. No central database. Votes propagate peer-to-peer across a Kademlia-based DHT and are merged with a CRDT-style algorithm that guarantees eventual consistency even under network partitions.
+A decentralized, serverless electronic voting system built on [Hyperswarm](https://github.com/holepunchto/hyperswarm) and [Electron](https://www.electronjs.org/). No server. No central database. Votes propagate peer-to-peer across a Kademlia-based DHT and are merged with a CRDT-style algorithm in memory.
 
 ---
 
@@ -132,13 +132,12 @@ electron/main.js  →  node-forge
      │
      ▼
 Identity badge shown in UI
-Voter's NIF used as their unique voterId when casting a vote
 ```
 
 This ensures:
-- **One vote per NIF** — votes are keyed by voter ID extracted from cert, so duplicate votes are rejected by the CRDT merge
+- **One vote per voterId** — duplicate votes from the same worker-side voter identity are ignored in memory
 - **Certificate expiry** is checked — expired certs are rejected before any action
-- **Key possession** is proven — a forged certificate without the matching private key fails the challenge-response
+- **Key possession** is checked in the certificate verification flow — the UI verifies the certificate and its private key before showing the identity badge
 
 ---
 
