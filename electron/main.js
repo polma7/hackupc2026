@@ -210,18 +210,18 @@ ipcMain.handle('cert:verify', async (evt, { data, password }) => {
 
     const certBags = p12.getBags({ bagType: forge.pki.oids.certBag })
     const certBag = (certBags[forge.pki.oids.certBag] || [])[0]
-    if (!certBag) return { ok: false, error: 'No se encontró certificado en el archivo' }
+    if (!certBag) return { ok: false, error: 'No certificate was found in the file' }
     const cert = certBag.cert
 
     const now = new Date()
     if (now < cert.validity.notBefore || now > cert.validity.notAfter) {
-      return { ok: false, error: 'El certificado está caducado' }
+      return { ok: false, error: 'The certificate has expired' }
     }
 
     const getField = (obj, name) => { try { return obj.getField(name)?.value || '' } catch { return '' } }
     const cn = getField(cert.subject, 'CN')
     const nif = getField(cert.subject, 'serialNumber') || getField(cert.subject, '2.5.4.5')
-    const issuer = getField(cert.issuer, 'CN') || 'CA desconocida'
+    const issuer = getField(cert.issuer, 'CN') || 'Unknown CA'
 
     let challengeOk = false
     try {
@@ -237,10 +237,10 @@ ipcMain.handle('cert:verify', async (evt, { data, password }) => {
         challengeOk = cert.publicKey.verify(md2.digest().bytes(), sig)
       }
     } catch {
-      challengeOk = true // clave EC u otro tipo — la descifrado del PKCS12 ya prueba posesión
+      challengeOk = true // EC key or other type — PKCS12 decryption already proves possession
     }
 
-    if (!challengeOk) return { ok: false, error: 'No se pudo verificar la clave del certificado' }
+    if (!challengeOk) return { ok: false, error: 'Could not verify the certificate key' }
 
     return {
       ok: true,
@@ -252,9 +252,9 @@ ipcMain.handle('cert:verify', async (evt, { data, password }) => {
   } catch (e) {
     const msg = e.message || ''
     if (msg.toLowerCase().includes('password') || msg.toLowerCase().includes('mac')) {
-      return { ok: false, error: 'Contraseña incorrecta' }
+      return { ok: false, error: 'Incorrect password' }
     }
-    return { ok: false, error: 'Error al leer el certificado: ' + msg }
+    return { ok: false, error: 'Error reading the certificate: ' + msg }
   }
 })
 
