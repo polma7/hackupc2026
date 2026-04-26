@@ -44,5 +44,11 @@ contextBridge.exposeInMainWorld('bridge', {
   },
   verifyCert: (arrayBuffer, password) => {
     return ipcRenderer.invoke('cert:verify', { data: Buffer.from(arrayBuffer), password })
+  },
+  httpInfo: () => ipcRenderer.invoke('http:info'),
+  onHttpReady: (listener) => {
+    const wrap = (evt, data) => listener(data)
+    ipcRenderer.on('http:ready', wrap)
+    return () => ipcRenderer.removeListener('http:ready', wrap)
   }
 })

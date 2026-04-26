@@ -804,7 +804,7 @@
       <div class="hero">
         <div class="eyebrow">Decentralized · Peer-to-peer · Trustless</div>
         <h1 class="title">
-          Vote without <span class="accent">servers</span>.<br/>
+          Vote without <span class="accent">servers</span>.<br/>3
           <span id="role-badge" class="role-pill"></span>
         </h1>
         <p class="lede">
@@ -876,6 +876,21 @@
         </div>
 
         <div id="create-poll-error" class="form-error"></div>
+      </div>
+
+      <div id="mobile-card" class="card hidden">
+        <h2>Vote from your phone</h2>
+        <div class="muted">Open this URL on a phone in the same Wi-Fi, or scan the QR. The phone will join the active poll automatically.</div>
+
+        <div class="label">Mobile URL</div>
+        <pre id="mobile-url">…</pre>
+
+        <div class="row">
+          <button id="copy-mobile-url-btn">Copy URL</button>
+        </div>
+
+        <div class="label">QR (URL + topic)</div>
+        <div id="mobile-qr" style="background:#fff;border-radius:10px;padding:14px;display:inline-block;max-width:240px;"></div>
       </div>
 
       <div id="poll-card" class="card hidden">

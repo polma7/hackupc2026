@@ -22,6 +22,10 @@ const pollCardEl      = document.getElementById('poll-card')
 const pollStateEl     = document.getElementById('poll-state')
 const pollBodyEl      = document.getElementById('poll-body')
 const eventsEl        = document.getElementById('events')
+const mobileCardEl    = document.getElementById('mobile-card')
+const mobileUrlEl     = document.getElementById('mobile-url')
+const mobileQrEl      = document.getElementById('mobile-qr')
+const copyMobileUrlBtn = document.getElementById('copy-mobile-url-btn')
 
 // ── Create-poll form refs ─────────────────────────────────────────────────────
 const createPollCardEl  = document.getElementById('create-poll-card')
@@ -519,3 +523,92 @@ if (copyTopicBtn) {
     }
   })
 }
+
+// ── Mobile bridge card ────────────────────────────────────────────────────────
+let mobileBaseUrls = []
+let mobileLastTopic = ''
+let mobileLastUrl = ''
+
+function pickPreferredUrl(urls) {
+  if (!urls || !urls.length) return ''
+  // Prefer common LAN ranges (192.168.*, 10.*, 172.16-31.*) over link-local.
+  const score = (u) => {
+    try {
+      const host = new URL(u).hostname
+      if (host.startsWith('192.168.')) return 3
+      if (host.startsWith('10.')) return 2
+      if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return 2
+      return 1
+    } catch { return 0 }
+  }
+  return [...urls].sort((a, b) => score(b) - score(a))[0]
+}
+
+async function refreshMobileCard() {
+  const topic = (topicEl.textContent || '').trim()
+  const validTopic = /^[0-9a-fA-F]{64}$/.test(topic) ? topic.toLowerCase() : ''
+  const base = pickPreferredUrl(mobileBaseUrls)
+  if (!base) {
+    mobileCardEl.classList.add('hidden')
+    return
+  }
+  mobileCardEl.classList.remove('hidden')
+  const fullUrl = validTopic ? `${base}/#${validTopic}` : base
+  if (fullUrl === mobileLastUrl && validTopic === mobileLastTopic) return
+  mobileLastUrl = fullUrl
+  mobileLastTopic = validTopic
+  mobileUrlEl.textContent = fullUrl
+  try {
+    const res = await fetch(`${base}/qr?data=${encodeURIComponent(fullUrl)}`)
+    if (res.ok) {
+      const svg = await res.text()
+      mobileQrEl.innerHTML = svg
+      const svgEl = mobileQrEl.querySelector('svg')
+      if (svgEl) {
+        svgEl.setAttribute('width', '100%')
+        svgEl.setAttribute('height', 'auto')
+        svgEl.style.display = 'block'
+      }
+    }
+  } catch {
+  }
+}
+
+async function loadHttpInfo() {
+  if (!bridge.httpInfo) return
+  try {
+    const info = await bridge.httpInfo()
+    if (info && info.urls) {
+      mobileBaseUrls = info.urls
+      refreshMobileCard()
+    }
+  } catch {
+  }
+}
+
+if (bridge.onHttpReady) {
+  bridge.onHttpReady((data) => {
+    if (data && data.urls) {
+      mobileBaseUrls = data.urls
+      refreshMobileCard()
+    }
+  })
+}
+
+if (copyMobileUrlBtn) {
+  copyMobileUrlBtn.addEventListener('click', async () => {
+    const text = mobileUrlEl.textContent.trim()
+    if (!text || text === '…') return
+    try {
+      await navigator.clipboard.writeText(text)
+      copyMobileUrlBtn.textContent = 'Copied!'
+      setTimeout(() => (copyMobileUrlBtn.textContent = 'Copy URL'), 1500)
+    } catch {
+      copyMobileUrlBtn.textContent = 'Copy failed'
+    }
+  })
+}
+
+loadHttpInfo()
+// Topic appears asynchronously after the worker is ready; keep refreshing.
+setInterval(refreshMobileCard, 1500)

@@ -11,11 +11,15 @@ const { isMac, isLinux, isWindows } = require('which-runtime')
 const { command, flag } = require('paparam')
 const pkg = require('../package.json')
 const { name, productName, version, upgrade } = pkg
+const { startHttpServer, getLanIPs } = require('./http-server')
+const { MobileSessionManager } = require('./mobile-sessions')
 
 const protocol = name
 
 const workers = new Map()
 let pear = null
+let httpInfo = null
+let mobileSessions = null
 
 const appName = productName ?? name
 
@@ -33,6 +37,8 @@ cmd.parse(app.isPackaged ? process.argv.slice(1) : process.argv.slice(2))
 
 const pearStore = cmd.flags.storage
 const updates = cmd.flags.updates
+const HTTP_PORT = Number(process.env.MOBILE_HTTP_PORT) || 8787
+const MAIN_WORKER_SPEC = '/workers/main.js'
 
 const isCreator = cmd.flags.create === true
 const role = isCreator ? 'creator' : 'voter'
@@ -120,6 +126,7 @@ function getWorker(specifier) {
   const pear = getPear()
   const workerConfig = JSON.stringify({ role, pollConfig })
   const worker = pear.run(require.resolve('..' + specifier), [pear.storage, workerConfig])
+
   function sendWorkerStdout(data) {
     sendToAll('pear:worker:stdout:' + specifier, data)
   }
@@ -150,6 +157,27 @@ function getWorker(specifier) {
   })
   app.on('before-quit', onBeforeQuit)
   return worker
+}
+
+async function ensureHttpBridge() {
+  if (httpInfo) return httpInfo
+  try {
+    const pearInstance = getPear()
+    mobileSessions = new MobileSessionManager({
+      pear: pearInstance,
+      storage: pearInstance.storage,
+      workerSpecifier: MAIN_WORKER_SPEC,
+      app
+    })
+    httpInfo = await startHttpServer({
+      port: HTTP_PORT,
+      sessions: mobileSessions
+    })
+    sendToAll('http:ready', { urls: httpInfo.urls, port: httpInfo.port, ips: httpInfo.ips })
+  } catch (error) {
+    console.error('[http] failed to start:', error.message)
+  }
+  return httpInfo
 }
 
 async function createWindow() {
@@ -197,9 +225,19 @@ ipcMain.handle('pear:applyUpdate', () => {
   const pear = getPear()
   pear.updater.applyUpdate()
 })
-ipcMain.handle('pear:startWorker', (evt, filename) => {
+ipcMain.handle('pear:startWorker', async (evt, filename) => {
   getWorker(filename)
+  if (filename === MAIN_WORKER_SPEC) {
+    await ensureHttpBridge()
+  }
   return true
+})
+
+ipcMain.handle('http:info', () => {
+  if (httpInfo) {
+    return { running: true, urls: httpInfo.urls, port: httpInfo.port, ips: httpInfo.ips }
+  }
+  return { running: false, urls: [], port: HTTP_PORT, ips: getLanIPs() }
 })
 ipcMain.handle('cert:verify', async (evt, { data, password }) => {
   try {
